@@ -64,6 +64,11 @@ Illustrative output; the repository, skills, and commit placeholder are examples
 Repository: example/agent-tools
 Commit: <commit-sha>
 Skills found: 2
+Similar groups: 0
+Skills in similar groups: 0 (0.0%)
+Standalone skills: 2
+Largest similar group: 0
+Skills with warnings: 0
 
 code-review
   Description: Review changes for correctness and maintainability.
@@ -79,6 +84,11 @@ release-notes
 Write the report to stdout and operational diagnostics to stderr. Use readable
 plain text without requiring color, an interactive terminal, or a pager.
 Include the repository, scanned commit, and number of discovered skills.
+Include similar-group counts, grouped skills and their percentage of all skills,
+standalone skills, largest similar-group size (zero if none), and skills with
+warnings. Before the full inventory, list each similar group's representative
+name, count, percentage, warning count, and member paths. Order groups by size
+descending, breaking ties by the first member path; order members by path.
 For a completed scan with no results, print `Skills found: 0` and
 `No SKILL.md files found.`
 
@@ -95,6 +105,13 @@ For a completed scan with no results, print `Skills found: 0` and
 5. Sort results by repository-relative path so repeated scans of the same commit
    produce a stable ordering. Link to files at the scanned commit.
 6. Distinguish a successful scan with zero candidates from a failed or incomplete scan.
+7. Group skills whose valid names or descriptions match after lowercasing and
+   replacing punctuation/whitespace runs with a single space. Compare names only
+   to names and descriptions only to descriptions. Ignore unavailable fields,
+   fallback names, and normalized empty values. Merge connected matches so each
+   skill belongs to exactly one group, including standalone skills. Similar
+   groups contain two or more members. This is metadata similarity, not a claim
+   of identical file contents or semantic equivalence.
 
 ## Error behavior
 

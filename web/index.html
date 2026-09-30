@@ -65,7 +65,20 @@
               <div><p class="summary-label">REPOSITORY</p><h3 id="result-repository"></h3><p id="result-commit" class="commit"></p></div>
               <div class="summary-numbers"><div><strong id="skill-count">0</strong><span>skills found</span></div><div><strong id="warning-count">0</strong><span>with warnings</span></div></div>
             </div>
-            <div id="filters" class="filters"><label class="search-field"><span aria-hidden="true">⌕</span><span class="sr-only">Search skills</span><input id="search" type="search" placeholder="Search names, descriptions, or paths…" autocomplete="off"></label><label class="warning-filter"><input id="warnings-only" type="checkbox">With warnings</label></div>
+            <section class="similarity-summary" aria-labelledby="similarity-title">
+              <h3 id="similarity-title">Similarity statistics</h3>
+              <dl class="similarity-statistics">
+                <div><dt>Similar groups</dt><dd id="similar-group-count">0</dd></div>
+                <div><dt>Skills in groups</dt><dd><span id="grouped-skill-count">0</span><span id="grouped-skill-share" class="statistic-note">0% of all skills</span></dd></div>
+                <div><dt>Standalone skills</dt><dd id="standalone-count">0</dd></div>
+                <div><dt>Largest similar group</dt><dd><span id="largest-group-count">0</span><span class="statistic-note">skills</span></dd></div>
+              </dl>
+              <p class="similarity-explanation">Skills with matching names or descriptions are grouped together, ignoring case, spacing, and punctuation. Groups include skills connected through other members. Only valid metadata is compared.</p>
+            </section>
+            <div id="result-controls">
+              <div class="result-views" role="group" aria-label="Result view"><button id="grouped-view" type="button" aria-pressed="true">Grouped skills</button><button id="all-view" type="button" aria-pressed="false">All skills</button></div>
+              <div id="filters" class="filters"><label class="search-field"><span aria-hidden="true">⌕</span><span class="sr-only">Search skills</span><input id="search" type="search" placeholder="Search names, descriptions, or paths…" autocomplete="off"></label><label class="warning-filter"><input id="similar-only" type="checkbox">Similar only</label><label class="warning-filter"><input id="warnings-only" type="checkbox">With warnings</label></div>
+            </div>
             <p id="result-count" class="result-count" role="status" aria-live="polite"></p>
             <div id="skill-list" class="skill-list"></div>
             <div id="no-results" class="no-results" hidden><h3 id="empty-title"></h3><p id="empty-description"></p><button id="clear-filters" class="text-button" type="button" hidden>Clear filters <span aria-hidden="true">↗</span></button></div>

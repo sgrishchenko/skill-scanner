@@ -1,3 +1,4 @@
+pub mod aggregation;
 pub mod cli;
 pub mod github;
 pub mod metadata;

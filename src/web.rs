@@ -14,6 +14,7 @@ use tokio::sync::{mpsc, Semaphore};
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
+    aggregation::{self, Aggregation},
     github::GitHubClient,
     report,
     repository::Repository,
@@ -39,11 +40,13 @@ struct WebInventory {
     repository: String,
     commit: Option<String>,
     skills: Vec<Skill>,
+    aggregation: Aggregation,
 }
 
 impl From<Inventory> for WebInventory {
     fn from(inventory: Inventory) -> Self {
         Self {
+            aggregation: aggregation::aggregate(&inventory.skills),
             repository: inventory.repository.to_string(),
             commit: inventory.commit,
             skills: inventory.skills,

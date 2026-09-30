@@ -93,11 +93,20 @@ Status: implemented. These decisions describe the Rust Cargo binary
 - **Credentials:** reuse the optional process-level `GITHUB_TOKEN`; never ask
   for, serialize, persist, or return it in the browser. Private repositories
   remain unsupported. No GitHub API base-URL override is exposed by the server.
+- **Aggregation:** shared Rust logic groups valid matching names or descriptions
+  after lowercase and punctuation/whitespace normalization. Hash-map lookups and
+  iterative disjoint-set traversal merge connected matches without comparing
+  every pair. Fallback names and unavailable/empty fields never create matches.
+  Each skill belongs to one group. Counts cover similar groups (at least two
+  members), grouped and standalone skills, largest similar group, and skills
+  with warnings. CLI and web serialize/render the same aggregation result;
+  members reference original inventory indices to avoid duplicating skill data.
 - **UI:** responsive, keyboard-accessible form, streaming progress, repository
-  and commit summary, path-sorted skill cards, case-insensitive search across
-  names/descriptions/paths, and a metadata-warning filter. Warnings are readable
-  on each affected card. Summary counts distinguish total skills from skills
-  with warnings. Search/filtering makes no additional GitHub requests.
+  and commit summary, grouped and path-sorted views, case-insensitive search
+  across names/descriptions/paths, and similarity/metadata-warning filters.
+  Groups show member counts, percentages, warnings, and expandable cards.
+  Summary and group statistics always describe the full scan; filtering changes
+  only visible members. Search/filtering makes no additional GitHub requests.
 - **State:** keep only the current inventory in page memory. Clear previous
   results when a new scan starts; failures cannot leave a stale inventory
   labeled complete. Reloading clears the page. Distinguish no matching filters,
