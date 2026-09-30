@@ -44,6 +44,9 @@ consistency with the existing specs; Rust checks are unnecessary.
 - Every PR video demo must come from a passing E2E test with screenshot
   assertions at key steps; follow the
   [video demo requirements](CONTRIBUTING.md#visual-feature-demonstrations).
+- For every PR, wait for all CI checks on the latest revision to pass. Diagnose
+  failures and push fixes to the same PR, then verify CI again; follow the
+  [CI completion requirements](CONTRIBUTING.md#ci-completion).
 
 ## Keep documentation current
 

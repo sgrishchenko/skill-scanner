@@ -10,7 +10,13 @@ Code: cargo fmt --all -- --check; cargo clippy --locked --all-targets -- -D warn
 cargo test --locked.
 Browser behavior: rebuild and check the relevant scenarios with mocked scan responses.
 Documentation only: check links and consistency with the specs; local Rust checks are unnecessary.
-Explain any skipped or blocked checks. -->
+For every PR, wait for all CI checks on the latest revision, including the full
+matrix and checks not required by branch protection. Record the verified commit
+and CI run links/results here. Diagnose failures, commit fixes to this PR, and
+verify all checks again after pushing. Pending or unsuccessful checks are not
+passing; keep this item unchecked until all checks pass. Explain skipped or
+blocked validation and keep externally blocked PRs in draft.
+See CONTRIBUTING.md#ci-completion. -->
 
 ## Video demonstration
 
@@ -45,6 +51,8 @@ Write "None" if there are none. -->
 - [ ] Relevant specs and documentation are updated, or no updates are needed.
 - [ ] Tests cover the changed behavior where useful, or no test changes are needed.
 - [ ] Validation results above are accurate, including any skipped or blocked checks.
+- [ ] All CI checks pass on the latest PR revision, and any fixes are included
+  in this PR; the verified commit and CI results are recorded above.
 - [ ] The final visual feature's demo is watchable inline above and accessible
   to reviewers, or this PR has no visual or interaction changes.
 - [ ] Every included video demo comes from a passing E2E test with screenshot
