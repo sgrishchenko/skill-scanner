@@ -1,0 +1,13 @@
+{
+  "name": "skill-scanner-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test --update-snapshots=none",
+    "snapshots": "playwright test --update-snapshots=all",
+    "demo": "node export-demo.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
