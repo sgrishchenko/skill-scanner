@@ -15,13 +15,17 @@ Explain any skipped or blocked checks. -->
 ## Video demonstration
 
 <!-- Required for features that change visible appearance or user interactions:
-attach a recorded video or link to one reviewers can access. Show the relevant
-user actions and visible result from the final implementation using local
-fixtures and mocked responses. For browser features, rebuild the executable
-before recording to embed the updated assets.
-Screenshots may supplement the video but do not replace it; a local path is insufficient.
-If recording or sharing is blocked, explain why and keep the PR in draft until
-the video is provided. Otherwise, write "Not applicable" for nonvisual features. -->
+embed the recorded demo here so reviewers can watch it inline without downloading
+it or leaving the PR. Use a GitHub video attachment; if upload is unavailable,
+embed an animated preview of the same recording and link the full video.
+Show the relevant user actions and visible result from the final implementation
+using local fixtures and mocked responses. For browser features, rebuild the
+executable before recording to embed the updated assets.
+Verify inline playback and reviewer access in the rendered PR. Download links,
+repository file links, local paths, or static screenshots alone are insufficient.
+If recording, sharing, or inline playback is blocked, explain why and keep the PR
+in draft until the inline demo is available. Otherwise, write "Not applicable"
+for nonvisual features. -->
 
 ## Risks or limitations
 
@@ -34,8 +38,8 @@ Write "None" if there are none. -->
 - [ ] Relevant specs and documentation are updated, or no updates are needed.
 - [ ] Tests cover the changed behavior where useful, or no test changes are needed.
 - [ ] Validation results above are accurate, including any skipped or blocked checks.
-- [ ] A video demonstration of the final visual feature is provided above, or
-  this PR has no visual or interaction changes.
+- [ ] The final visual feature's demo is watchable inline above and accessible
+  to reviewers, or this PR has no visual or interaction changes.
 
 <!-- See CONTRIBUTING.md for the full PR rules. Before merging, address review
 feedback and wait for all CI jobs to pass on the latest revision. -->

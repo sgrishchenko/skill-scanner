@@ -1,6 +1,6 @@
 ---
 name: create-feature-pr
-description: Prepare and create a feature pull request for Skill Scanner using the repository's contribution guide and PR template. Use when asked to open a feature PR or prepare its title and description.
+description: Prepare and create a feature pull request for Skill Scanner using the repository's contribution guide and PR template, with demos watchable inline in the PR description for visual changes. Use when asked to open a feature PR or prepare its title and description.
 ---
 
 # Create Feature PR
@@ -72,14 +72,19 @@ and visible result from the final implementation. For browser features, rebuild
 the executable before recording to embed updated assets. Use local fixtures and
 mocked responses.
 
-Attach the video or provide a link reviewers can access in the PR's Video
-demonstration section. Confirm that the video is available to reviewers; a local
-file path or screenshots do not satisfy the requirement. Re-record if later
-changes make the demonstration inaccurate. If recording or sharing is blocked,
-explain the blocker and keep the PR in draft until the video is provided. For
-nonvisual features, mark the section as not applicable. For PR-text-only
-requests, use existing video evidence and identify missing evidence without
-recording or uploading anything.
+Embed the recorded demo in the PR description's Video demonstration section so
+reviewers can watch it inline without downloading it or leaving the PR. Use a
+GitHub video attachment that renders as a player. If attachment upload is
+unavailable, embed an animated preview of the same recording and link the full
+video, following the contribution guide. A download link, repository file link,
+local path, or static screenshots alone do not satisfy the requirement.
+
+Verify the rendered PR contains a playable video or animated preview accessible
+to reviewers. Re-record if later changes make the demonstration inaccurate. If
+recording, sharing, or inline playback is blocked, explain the blocker and keep
+the PR in draft until the inline demo is available. For nonvisual features, mark
+the section as not applicable. For PR-text-only requests, use existing video
+evidence and identify missing evidence without recording or uploading anything.
 
 ## Write the title and description
 
@@ -88,7 +93,7 @@ Replace its instructional comments with concrete content. Write a short title
 describing the final change. Explain the problem and resulting behavior, linking
 relevant specs and an issue when one exists; an issue is optional.
 
-Include validation evidence, the required video demonstration for visual
+Include validation evidence, the required inline demonstration for visual
 features, and material risks or limitations. Screenshots may supplement the
 video when useful. Mark checklist items only when supported by the actual work.
 Keep the title and description aligned with the final diff, including when
@@ -110,6 +115,7 @@ is blocked by authentication, permissions, or connectivity, keep the prepared
 title and body and report the blocker without claiming the PR was created.
 
 Confirm the resulting PR's URL, branches, title, description, and draft status.
+For visual features, confirm the demo renders inline in the saved description.
 Report the URL, readiness, validation results, and any remaining work. For a
 text-only request, return the prepared title and body. Creating the PR does not
 authorize merging it; leave it open for review under the contribution guide.

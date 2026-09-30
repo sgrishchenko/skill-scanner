@@ -16,7 +16,8 @@ for architecture and [the README](README.md) for setup and usage.
 - Describe material compatibility concerns, limitations, or follow-up work
   when applicable.
 - For features that change visible appearance or user interactions, include a
-  recorded [video demonstration](#visual-feature-demonstrations) in the PR.
+  recorded [video demonstration](#visual-feature-demonstrations) watchable inline
+  in the PR description.
 - Keep the title and description aligned with the final implementation as the
   scope changes. Use a draft PR while work, required validation, or a required
   video demonstration is incomplete.
@@ -62,14 +63,20 @@ implementation. For browser features, rebuild the executable before recording
 to include the updated assets. Use local fixtures and mocked responses without
 live GitHub access or real credentials.
 
-Attach the video or provide a link reviewers can access in the PR template's
-Video demonstration section. A local file path is insufficient. Screenshots may
-supplement the video but do not replace it. Re-record the demonstration if later
-changes make it inaccurate.
+Embed the recorded demo directly in the PR description's Video demonstration
+section so reviewers can watch it without downloading it or leaving the PR.
+Use a GitHub video attachment that renders as an inline player. If attachment
+upload is unavailable, embed an animated preview of the same recording and link
+the full video. A download link, repository file link, or local path alone is
+insufficient. Static screenshots may supplement the demo but do not replace it.
 
-If recording or sharing the video is blocked, explain the blocker in the PR and
-keep it in draft until the video is provided. For features without visual or
-interaction changes, mark the section as not applicable.
+Verify the saved PR description renders a playable video or animated preview
+and that the media is accessible to reviewers. Re-record the demonstration if
+later changes make it inaccurate.
+
+If recording, sharing, or inline playback is blocked, explain the blocker in the
+PR and keep it in draft until the inline demo is available. For features without
+visual or interaction changes, mark the section as not applicable.
 
 ## Review and merge
 
