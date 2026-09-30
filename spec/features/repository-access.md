@@ -24,6 +24,11 @@ anonymous API limits. An optional process-level `GITHUB_TOKEN` raises public
 repository API limits. Reject private repositories even when the token can
 access them.
 
+Even with a cached analysis, every scan checks repository access and resolves
+the current default-branch commit online. Cache hits skip only tree/blob reads;
+failed validation cannot return stale results. See the
+[analysis cache](analysis-cache.md#freshness-and-reuse).
+
 Never include credentials or server error bodies in reports or diagnostics.
 The browser never asks for, serializes, persists, or receives the token. The
 web server exposes no GitHub API base-URL override.

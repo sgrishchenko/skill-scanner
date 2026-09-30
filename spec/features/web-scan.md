@@ -17,6 +17,9 @@ Status: implemented. The [local web server](local-web-server.md) uses the same
    indeterminate progress bar until the candidate count is known. Skill
    counters describe the file about to be read, so the progress bar counts only
    files already read.
+   A [cache hit](analysis-cache.md#progress-and-web-lifecycle) announces the
+   reused commit after online validation, with indeterminate progress until
+   completion and no per-skill counters.
 4. Require a completion event before presenting the full
    [results](web-results.md). An HTTP success status alone is insufficient.
    Never show a partial inventory.
@@ -50,8 +53,11 @@ not cancel GitHub work: the worker finishes its scan before releasing capacity.
 A request during that time can still receive a busy response.
 
 Keep only the current inventory in page memory. Closing or reloading the page
-discards it. There are no saved scans, history, server job IDs, polling endpoints,
-or database.
+discards the displayed results. The shared [analysis cache](analysis-cache.md)
+persists complete analyses on disk, including successful disconnected scans;
+another submission validates the current commit before reuse. There are no
+saved-scan browsing controls, history, server job IDs, polling endpoints, or
+database.
 
 ## Acceptance checks
 
@@ -64,3 +70,5 @@ or database.
 - Multiple tabs cannot start concurrent scans. Capacity is released after a
   disconnected scan finishes.
 - Starting another scan resets the view and filters; reloading clears results.
+- A cached scan announces reuse and renders the same full results and warnings
+  as a fresh scan; reloading still requires another submission and validation.

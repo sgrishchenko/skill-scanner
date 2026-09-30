@@ -39,7 +39,7 @@ Before streaming, errors are JSON with a `message`:
 
 Accepted requests return HTTP 200 with
 `Content-Type: application/x-ndjson; charset=utf-8`. Each newline terminates a
-JSON object. Progress arrives before the corresponding GitHub operation:
+JSON object. Operation progress arrives before the corresponding GitHub request:
 
 ```json
 {"type":"progress","message":"Resolving repository: example/skills","current":null,"total":null}
@@ -52,6 +52,12 @@ JSON object. Progress arrives before the corresponding GitHub operation:
 inventory. A failed scan ends with `{"type":"error","message":"..."}` and
 no inventory. JSON encoding handles embedded newlines; clients must handle
 event boundaries split across chunks.
+
+After repository and commit resolution, an [analysis cache](analysis-cache.md)
+hit emits a progress message `Using cached analysis for commit: <full-sha>` with
+null `current` and `total`, then the usual completion inventory. It emits no
+discovery or individual-skill progress. Cached scans use the same request and
+inventory schema and retain `Cache-Control: no-store` for HTTP responses.
 
 An HTTP success status without a completion event is not a successful scan.
 [Web scan lifecycle](web-scan.md#concurrency-and-state) defines concurrency,

@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use reqwest::Url;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Repository {
     pub owner: String,
     pub name: String,

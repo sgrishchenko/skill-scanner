@@ -18,7 +18,8 @@ skill-scanner --version
 ```
 
 Run `scan` with one supported [repository input](repository-access.md#repository-input).
-The application resolves the default branch to a commit and scans its contents.
+The application resolves the default branch to a commit and scans its contents,
+reusing a matching [cached analysis](analysis-cache.md) when available.
 Read the skill names and descriptions, then follow a GitHub link to inspect a
 source file. `serve` launches the [local web server](local-web-server.md).
 Branch selection and CLI JSON export remain deferred.
@@ -32,6 +33,8 @@ warnings identify the affected file and field.
 Flush plain-text [progress](skill-discovery.md#progress) before each operation,
 including fallback directory paths and each skill's path with a one-based
 counter out of the discovered total.
+On cache hits, print the reused commit after resolution, then render the usual
+report and warnings without per-file scan progress.
 
 Use readable plain text without requiring color, a TTY, or a pager. Escape
 control characters from repository content, including terminal escape

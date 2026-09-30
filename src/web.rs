@@ -15,6 +15,7 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
     aggregation::{self, Aggregation},
+    cache::ScanCache,
     github::GitHubClient,
     report,
     repository::Repository,
@@ -26,6 +27,7 @@ const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-
 #[derive(Clone)]
 struct WebState {
     client: Arc<GitHubClient>,
+    cache: ScanCache,
     available: Arc<Semaphore>,
 }
 
@@ -88,11 +90,15 @@ pub fn serve(port: u16, client: GitHubClient) -> io::Result<()> {
     eprintln!("Skill Scanner is available at http://127.0.0.1:{port}\nPress Ctrl+C to stop.");
     runtime.block_on(async {
         let listener = tokio::net::TcpListener::from_std(listener)?;
-        axum::serve(listener, router(client.clone(), port)).await
+        axum::serve(
+            listener,
+            router(client.clone(), port, ScanCache::from_environment()),
+        )
+        .await
     })
 }
 
-pub(crate) fn router(client: Arc<GitHubClient>, port: u16) -> Router {
+pub(crate) fn router(client: Arc<GitHubClient>, port: u16, cache: ScanCache) -> Router {
     Router::new()
         .route(
             "/",
@@ -124,6 +130,7 @@ pub(crate) fn router(client: Arc<GitHubClient>, port: u16) -> Router {
         .fallback(|| async { error(StatusCode::NOT_FOUND, "Page not found.") })
         .with_state(WebState {
             client,
+            cache,
             available: Arc::new(Semaphore::new(1)),
         })
         .layer(DefaultBodyLimit::max(4096))
@@ -211,26 +218,27 @@ async fn scan(
     let (sender, receiver) = mpsc::channel::<Result<String, Infallible>>(8);
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        let result = scanner::scan_with_progress(&state.client, &repository, |progress| {
-            let (current, total) = match &progress {
-                ScanProgress::Skill { current, total, .. } => (Some(*current), Some(*total)),
-                _ => (None, None),
-            };
-            let mut message = Vec::new();
-            report::write_progress(&mut message, progress)
-                .expect("writing to a vector cannot fail");
-            send(
-                &sender,
-                Event::Progress {
-                    message: String::from_utf8(message)
-                        .expect("progress is UTF-8")
-                        .trim_end()
-                        .to_owned(),
-                    current,
-                    total,
-                },
-            );
-        });
+        let result =
+            scanner::scan_with_cache(&state.client, &repository, &state.cache, |progress| {
+                let (current, total) = match &progress {
+                    ScanProgress::Skill { current, total, .. } => (Some(*current), Some(*total)),
+                    _ => (None, None),
+                };
+                let mut message = Vec::new();
+                report::write_progress(&mut message, progress)
+                    .expect("writing to a vector cannot fail");
+                send(
+                    &sender,
+                    Event::Progress {
+                        message: String::from_utf8(message)
+                            .expect("progress is UTF-8")
+                            .trim_end()
+                            .to_owned(),
+                        current,
+                        total,
+                    },
+                );
+            });
         let event = match result {
             Ok(inventory) => Event::Complete {
                 inventory: inventory.into(),

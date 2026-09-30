@@ -22,6 +22,35 @@ use crate::{
 #[path = "web_tests.rs"]
 mod web;
 
+#[path = "cache_tests.rs"]
+mod cache;
+
+struct TestDirectory(std::path::PathBuf);
+
+impl TestDirectory {
+    fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        loop {
+            let path = std::env::temp_dir().join(format!(
+                "skill-scanner-test-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Self(path),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("could not create test directory: {error}"),
+            }
+        }
+    }
+}
+
+impl Drop for TestDirectory {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 const COMMIT: &str = "1111111111111111111111111111111111111111";
 const ROOT: &str = "2222222222222222222222222222222222222222";
 const A: &str = "3333333333333333333333333333333333333333";

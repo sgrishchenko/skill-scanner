@@ -1,8 +1,8 @@
 use serde_yaml_ng::{Mapping, Value};
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MetadataWarning {
-    pub field: &'static str,
+    pub field: String,
     pub message: String,
 }
 
@@ -21,7 +21,7 @@ impl Metadata {
             warnings: ["name", "description"]
                 .into_iter()
                 .map(|field| MetadataWarning {
-                    field,
+                    field: field.to_owned(),
                     message: reason.to_owned(),
                 })
                 .collect(),
@@ -80,7 +80,7 @@ fn field(
         None => "field is missing",
     };
     warnings.push(MetadataWarning {
-        field: key,
+        field: key.to_owned(),
         message: reason.to_owned(),
     });
     None

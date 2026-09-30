@@ -82,7 +82,41 @@ The browser uses the same scanner and GitHub limits as the CLI. To raise the
 limits, set `GITHUB_TOKEN` in the environment before starting the server; the
 token stays in the server process. Only one scan runs at a time across all tabs.
 Results stay in page memory and disappear on reload. Closing a page lets its
-current scan finish in the background before another scan can start.
+current scan finish in the background before another scan can start. Complete
+analyses are cached on disk; another submission checks the current commit before
+reusing them.
+
+## Analysis cache
+
+The CLI and web server automatically share a persistent cache of analyzed
+repositories. Each scan still asks GitHub for repository details and the current
+default-branch commit. If the commit and scanner version match the cached entry,
+the scanner reuses the metadata and warnings without downloading trees or skill
+files again. Progress reports `Using cached analysis for commit: <full-sha>`.
+Changed commits trigger a fresh scan and replace the entry after completion.
+
+| Platform | Default cache directory |
+| --- | --- |
+| Linux | `$XDG_CACHE_HOME/skill-scanner/scans`, or `$HOME/.cache/skill-scanner/scans` when XDG_CACHE_HOME is unset, empty, or relative |
+| macOS | `$HOME/Library/Caches/skill-scanner/scans` |
+| Windows | `%LOCALAPPDATA%\skill-scanner\scans` |
+
+Set `SKILL_SCANNER_CACHE_DIR` to override the entire cache directory for either
+command, or set it to an empty value to disable caching. For example, in a POSIX
+shell:
+
+```sh
+SKILL_SCANNER_CACHE_DIR=/tmp/skill-scanner-cache skill-scanner scan OWNER/REPO
+SKILL_SCANNER_CACHE_DIR= skill-scanner serve
+```
+
+Delete the cache directory to clear it. The cache keeps one completed analysis
+per repository and survives restarts; it does not provide saved scan history.
+Network or access failures still fail the scan because the current commit must
+be checked. Damaged or unavailable cache files fall back to a fresh scan, and
+cache write failures do not fail a completed scan. Entries larger than 32 MiB
+are not cached. See the [cache feature spec](spec/features/analysis-cache.md)
+for the full validity and storage rules.
 
 ## Terminal output
 
@@ -168,10 +202,11 @@ environment to use higher public API limits. Private repositories remain
 unsupported even if the token grants access. Tokens are never printed. If a
 token is rejected, unset it for anonymous access or provide a valid token.
 
-Each scan requests repository details, the default-branch commit, its tree, and
-each eligible skill blob. Truncated recursive trees trigger a complete walk of
-individual directory trees. An incomplete listing or failed download makes the
-scan fail; partial results are never reported as a completed inventory.
+Each scan requests repository details and the default-branch commit. On a cache
+miss, it also requests the tree and each eligible skill blob. Truncated recursive
+trees trigger a complete walk of individual directory trees. An incomplete
+listing or failed download makes the scan fail; partial results are never
+reported as a completed inventory.
 
 Connections time out after 10 seconds, with a 30-second total timeout per
 request. Transient failures are retried up to twice (250 ms, then 500 ms backoff).
@@ -198,7 +233,8 @@ or tokens. Keep `Cargo.lock` checked in; it includes a `yoke-derive` version
 compatible with Rust 1.84 (0.8.3 incorrectly uses a newer standard-library API).
 
 Modules separate argument parsing, repository input, GitHub transport, discovery,
-metadata, terminal rendering, and the web server. Browser assets live in `web/`.
+analysis caching, metadata, terminal rendering, and the web server. Browser
+assets live in `web/`.
 See the [feature specification index](spec/README.md) for behavior and acceptance
 checks, and [implementation decisions](spec/implementation.md) for architecture
 and verification.

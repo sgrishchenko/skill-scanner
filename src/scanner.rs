@@ -1,20 +1,21 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    cache::ScanCache,
     github::{validate_sha, BlobContent, GitHubClient, Tree, TreeEntry, MAX_SKILL_BYTES},
     metadata::{self, Metadata, MetadataWarning},
     repository::Repository,
     ScanError,
 };
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Inventory {
     pub repository: Repository,
     pub commit: Option<String>,
     pub skills: Vec<Skill>,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Skill {
     pub path: String,
     pub name: String,
@@ -27,6 +28,7 @@ pub struct Skill {
 pub enum ScanProgress<'a> {
     Repository(&'a Repository),
     DefaultBranch(&'a str),
+    Cached(&'a str),
     DiscoveringSkills,
     Directory(&'a str),
     Skill {
@@ -44,6 +46,16 @@ pub fn scan(client: &GitHubClient, repository: &Repository) -> Result<Inventory,
 pub fn scan_with_progress(
     client: &GitHubClient,
     repository: &Repository,
+    progress: impl FnMut(ScanProgress<'_>),
+) -> Result<Inventory, ScanError> {
+    scan_with_cache(client, repository, &ScanCache::disabled(), progress)
+}
+
+/// Revalidate the public repository and current commit before reusing analysis.
+pub fn scan_with_cache(
+    client: &GitHubClient,
+    repository: &Repository,
+    cache: &ScanCache,
     mut progress: impl FnMut(ScanProgress<'_>),
 ) -> Result<Inventory, ScanError> {
     progress(ScanProgress::Repository(repository));
@@ -67,6 +79,10 @@ pub fn scan_with_progress(
     let Some(commit) = client.default_commit(repository, &info.default_branch)? else {
         return Ok(inventory);
     };
+    if let Some(inventory) = cache.load(repository, &commit.sha) {
+        progress(ScanProgress::Cached(&commit.sha));
+        return Ok(inventory);
+    }
     let candidates = discover(client, repository, &commit.commit.tree.sha, &mut progress)?;
     let total = candidates.len();
     for (index, entry) in candidates.into_iter().enumerate() {
@@ -105,6 +121,7 @@ pub fn scan_with_progress(
         });
     }
     inventory.commit = Some(commit.sha);
+    cache.store(&inventory);
     Ok(inventory)
 }
 

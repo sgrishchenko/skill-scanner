@@ -8,6 +8,8 @@ Repositories follow the [repository access](repository-access.md) contract.
 1. Resolve the repository's default branch once to one commit and root tree.
    Use only tree/blob object IDs afterward so the inventory is consistent even
    if the branch changes during the scan.
+   If the [analysis cache](analysis-cache.md) contains a complete inventory for
+   this repository, commit, and scanner version, reuse it and skip steps 2–5.
 2. Discover regular files named exactly `SKILL.md` recursively, including the
    repository root and hidden directories. Discovery is not limited to known
    tool-specific paths. Regular modes `100644` and `100755` qualify; skip
@@ -30,6 +32,10 @@ Report progress before resolving the repository, resolving the default branch,
 discovering files, walking each directory during a truncated-tree fallback,
 and reading each skill. Individual skill progress includes its path and a
 one-based counter out of the discovered total.
+
+After repository and default-branch resolution, cache hits report the reused
+commit and complete without discovery or per-skill progress. See
+[cache progress](analysis-cache.md#progress-and-web-lifecycle).
 
 The counter describes the file about to be read. The
 [CLI](cli-report.md#output-streams-and-progress) flushes progress to stderr;
@@ -57,6 +63,8 @@ results as a completed inventory or failures as zero skills.
 - Two skills with the same name and different paths remain separate results.
 - Symlinks and submodule contents are skipped.
 - Repeated scans of the same commit list skills in the same order.
+- Cached scans revalidate the current commit and skip discovery and metadata
+  reads only when the [cache validity checks](analysis-cache.md#freshness-and-reuse) pass.
 - A repository with no `SKILL.md` files succeeds with zero results; an empty
   repository additionally has no commit to scan.
 - Truncated recursive trees trigger a complete directory walk. An interrupted

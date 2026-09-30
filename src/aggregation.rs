@@ -136,7 +136,7 @@ mod tests {
             warnings: invalid
                 .iter()
                 .map(|&field| MetadataWarning {
-                    field,
+                    field: field.to_owned(),
                     message: "field is missing".to_owned(),
                 })
                 .collect(),

@@ -27,6 +27,28 @@ Resolve the default branch once, then scan tree/blob object IDs as defined by
 the [metadata rules](features/skill-metadata.md). Both interfaces use the same
 scanner and progress events.
 
+## Persistent analysis cache
+
+Keep disk serialization, versioning, location selection, and atomic replacement
+in `cache`, separate from GitHub transport and discovery. CLI and web entry
+points configure the same `ScanCache` from the environment and invoke the shared
+`scan_with_cache` pipeline. Uncached scanner helpers and explicit cache paths
+support isolated tests without touching a user's cache.
+
+The scanner checks the [analysis cache](features/analysis-cache.md) only after
+live repository access and default-branch commit resolution, then stores only
+completed inventories. JSON entries contain the repository, full commit, skill
+metadata and warnings, a format version, and the scanner package version. Bump
+the format version when discovery or metadata semantics change without a
+package version bump. Recompute aggregation from the cached inventory using
+shared Rust logic.
+
+Use one case-insensitive repository path per entry, with prefixed components
+safe for supported filesystems. Limit cache reads and stored entries to 32 MiB.
+Write a unique sibling temporary file, sync and close it, then rename it over
+the entry. Failed writes leave the prior entry intact and remove the temporary
+file when possible. No database, lock service, or cache dependency is needed.
+
 ## Shared aggregation
 
 Implement [similarity grouping](features/similarity-grouping.md) in shared Rust
@@ -61,6 +83,7 @@ real credentials.
 | --- | --- |
 | Repository input, metadata, aggregation, and terminal rendering | Unit tests for parsing, grouping, ordering, warnings, output, and escaping |
 | GitHub access and discovery | Fixtures and local mock HTTP cover snapshots, authentication, truncation fallback, limits, retries, failures, and empty repositories |
+| Analysis cache | Temporary directories and mocked HTTP verify persisted reuse, commit invalidation, cross-interface sharing, warnings, corrupt entries, failed refreshes, and unavailable storage |
 | CLI | Subprocess tests verify exit codes and stdout/stderr separation |
 | Web API and scan lifecycle | In-process HTTP tests exercise the real scanner against mocked GitHub responses, including streaming, warnings, errors, empty results, concurrency, disconnects, input/body limits, and Host/Origin checks |
 | Embedded server | CLI subprocess tests start the site from another working directory and check port errors |

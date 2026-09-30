@@ -6,6 +6,7 @@ use std::{
 
 use clap::Parser;
 use skill_scanner::{
+    cache::ScanCache,
     cli::{Cli, Command},
     github::GitHubClient,
     report,
@@ -57,9 +58,10 @@ fn main() -> ExitCode {
             }
         };
     }
-    let result = scanner::scan_with_progress(
+    let result = scanner::scan_with_cache(
         &client,
         &repository.expect("scan command has a repository"),
+        &ScanCache::from_environment(),
         |progress| {
             let _ = report::write_progress(&mut io::stderr().lock(), progress);
         },

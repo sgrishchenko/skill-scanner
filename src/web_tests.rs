@@ -10,6 +10,14 @@ use tower::ServiceExt;
 const HOST: &str = "127.0.0.1:3000";
 
 fn with_web(replies: Vec<Reply>, test: impl FnOnce(Router, &tokio::runtime::Runtime)) {
+    with_web_cache(replies, crate::cache::ScanCache::disabled(), test);
+}
+
+fn with_web_cache(
+    replies: Vec<Reply>,
+    cache: crate::cache::ScanCache,
+    test: impl FnOnce(Router, &tokio::runtime::Runtime),
+) {
     let server = Server::start(replies);
     // The blocking reqwest client must be created and dropped outside Tokio.
     let client = Arc::new(server.client());
@@ -17,7 +25,7 @@ fn with_web(replies: Vec<Reply>, test: impl FnOnce(Router, &tokio::runtime::Runt
         .enable_all()
         .build()
         .unwrap();
-    test(crate::web::router(client.clone(), 3000), &runtime);
+    test(crate::web::router(client.clone(), 3000, cache), &runtime);
     drop(runtime);
     server.finish();
 }
@@ -136,7 +144,7 @@ fn default_http_port_accepts_the_hosts_and_origins_browsers_send() {
         .build()
         .unwrap();
     runtime.block_on(async {
-        let app = crate::web::router(client.clone(), 80);
+        let app = crate::web::router(client.clone(), 80, crate::cache::ScanCache::disabled());
         for host in ["127.0.0.1", "localhost"] {
             let mut request = request("GET", "/", "");
             request.headers_mut().insert("host", host.parse().unwrap());
@@ -362,6 +370,7 @@ fn distinguishes_no_skills_from_an_empty_repository_in_web_results() {
 
 #[test]
 fn concurrent_scans_are_rejected_and_disconnect_releases_capacity_after_completion() {
+    let directory = TestDirectory::new();
     let mut replies = snapshot();
     // More progress than the bounded channel can hold keeps the first worker
     // active until the body is consumed or dropped, without timing assumptions.
@@ -375,28 +384,128 @@ fn concurrent_scans_are_rejected_and_disconnect_releases_capacity_after_completi
     ));
     replies.extend((0..10).map(|_| blob(A, VALID)));
     replies.extend(snapshot());
-    replies.push(tree(ROOT, true, false, vec![]));
-    with_web(replies, |app, runtime| {
-        runtime.block_on(async {
-            let first = app.clone().oneshot(scan_request()).await.unwrap();
-            assert_eq!(first.status(), StatusCode::OK);
-            let second = app.clone().oneshot(scan_request()).await.unwrap();
-            assert_eq!(second.status(), StatusCode::CONFLICT);
-            drop(first);
-            // Finishing already-started GitHub work after disconnection is intentional.
-            let response = tokio::time::timeout(Duration::from_secs(5), async {
-                loop {
-                    let response = app.clone().oneshot(scan_request()).await.unwrap();
-                    if response.status() != StatusCode::CONFLICT {
-                        break response;
+    with_web_cache(
+        replies,
+        crate::cache::ScanCache::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                let first = app.clone().oneshot(scan_request()).await.unwrap();
+                assert_eq!(first.status(), StatusCode::OK);
+                let second = app.clone().oneshot(scan_request()).await.unwrap();
+                assert_eq!(second.status(), StatusCode::CONFLICT);
+                drop(first);
+                // Finishing already-started GitHub work after disconnection is intentional.
+                let response = tokio::time::timeout(Duration::from_secs(5), async {
+                    loop {
+                        let response = app.clone().oneshot(scan_request()).await.unwrap();
+                        if response.status() != StatusCode::CONFLICT {
+                            break response;
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
                     }
-                    tokio::time::sleep(Duration::from_millis(10)).await;
-                }
+                })
+                .await
+                .unwrap();
+                let events = events(response).await;
+                assert_eq!(events.last().unwrap()["type"], "complete");
+                assert_eq!(
+                    events.last().unwrap()["inventory"]["skills"]
+                        .as_array()
+                        .unwrap()
+                        .len(),
+                    10
+                );
+                assert!(events
+                    .iter()
+                    .any(|event| event["message"].as_str().is_some_and(
+                        |message| message.starts_with("Using cached analysis for commit:")
+                    )));
             })
-            .await
-            .unwrap();
-            let events = events(response).await;
-            assert_eq!(events.last().unwrap()["type"], "complete");
-        })
+        },
+    );
+}
+
+#[test]
+fn cli_and_web_share_commit_validated_analysis_across_cache_instances() {
+    use crate::cache::ScanCache;
+
+    let directory = TestDirectory::new();
+    let mut replies = snapshot();
+    replies.extend([
+        tree(ROOT, true, false, vec![skill("SKILL.md", A)]),
+        blob(A, b"missing metadata"),
+    ]);
+    replies.extend(snapshot());
+    replies.push(repository());
+    replies.push(Reply::json(
+        "/repos/example/skills/commits/main",
+        200,
+        json!({"sha": D, "commit": {"tree": {"sha": ROOT}}}),
+    ));
+    replies.extend([
+        tree(ROOT, true, false, vec![skill("new/SKILL.md", B)]),
+        blob(B, VALID),
+    ]);
+    replies.push(repository());
+    replies.push(Reply::json(
+        "/repos/example/skills/commits/main",
+        200,
+        json!({"sha": D, "commit": {"tree": {"sha": ROOT}}}),
+    ));
+    let server = Server::start(replies);
+    let client = Arc::new(server.client());
+    let repository = "example/skills".parse().unwrap();
+    let cli_inventory = scanner::scan_with_cache(
+        &client,
+        &repository,
+        &ScanCache::new(directory.0.clone()),
+        |_| {},
+    )
+    .unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let refreshed = runtime.block_on(async {
+        let app = crate::web::router(client.clone(), 3000, ScanCache::new(directory.0.clone()));
+        let cached = events(app.clone().oneshot(scan_request()).await.unwrap()).await;
+        assert_eq!(cached.len(), 4);
+        assert_eq!(
+            cached[2]["message"],
+            format!("Using cached analysis for commit: {COMMIT}")
+        );
+        assert!(cached[2]["current"].is_null());
+        assert!(cached[2]["total"].is_null());
+        assert!(cached[..3]
+            .iter()
+            .all(|event| event.get("inventory").is_none()));
+        assert_eq!(
+            cached[3]["inventory"]["skills"],
+            serde_json::to_value(&cli_inventory.skills).unwrap()
+        );
+        assert_eq!(
+            cached[3]["inventory"]["aggregation"],
+            serde_json::to_value(crate::aggregation::aggregate(&cli_inventory.skills)).unwrap()
+        );
+        let refreshed = events(app.oneshot(scan_request()).await.unwrap()).await;
+        assert!(refreshed.iter().any(|event| event["current"] == 1));
+        let inventory = refreshed.last().unwrap()["inventory"].clone();
+        assert_eq!(inventory["commit"], D);
+        assert_eq!(inventory["skills"][0]["path"], "new/SKILL.md");
+        inventory
     });
+    drop(runtime);
+    let cli_inventory = scanner::scan_with_cache(
+        &client,
+        &repository,
+        &ScanCache::new(directory.0.clone()),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(
+        refreshed["skills"],
+        serde_json::to_value(&cli_inventory.skills).unwrap()
+    );
+    assert_eq!(cli_inventory.commit.as_deref(), Some(D));
+    assert_eq!(server.finish().len(), 12);
 }

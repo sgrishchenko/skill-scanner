@@ -33,6 +33,13 @@ pub fn write_progress(mut output: impl Write, progress: ScanProgress<'_>) -> io:
                 terminal_text(branch)
             )?;
         }
+        ScanProgress::Cached(commit) => {
+            writeln!(
+                output,
+                "Using cached analysis for commit: {}",
+                terminal_text(commit)
+            )?;
+        }
         ScanProgress::DiscoveringSkills => {
             writeln!(output, "Discovering SKILL.md files: /")?;
         }
@@ -177,7 +184,7 @@ mod tests {
                     link: format!("https://github.com/a/b/blob/abc/{index}/SKILL.md"),
                     warnings: if index == 0 {
                         vec![MetadataWarning {
-                            field: "description",
+                            field: "description".to_owned(),
                             message: "field is missing".to_owned(),
                         }]
                     } else {
@@ -206,7 +213,7 @@ mod tests {
                 description: "Hello\u{202e}world".to_owned(),
                 link: "https://github.com/a/b/blob/abc/skills/evil%0A/SKILL.md".to_owned(),
                 warnings: vec![MetadataWarning {
-                    field: "name",
+                    field: "name".to_owned(),
                     message: "field is missing".to_owned(),
                 }],
             }],
