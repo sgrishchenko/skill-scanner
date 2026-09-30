@@ -1,6 +1,6 @@
 ---
 name: create-feature-pr
-description: Prepare and create a feature pull request for Skill Scanner using the repository's contribution guide and PR template, with inline demos from passing E2E tests and screenshot assertions for visual changes. Use when asked to open a feature PR or prepare its title and description.
+description: Prepare and create a feature pull request for Skill Scanner using the repository's contribution guide and PR template, with tested inline demos for visual changes and follow-through until all CI checks pass. Use when asked to open a feature PR or prepare its title and description.
 ---
 
 # Create Feature PR
@@ -135,6 +135,25 @@ title and body and report the blocker without claiming the PR was created.
 
 Confirm the resulting PR's URL, branches, title, description, and draft status.
 For visual features, confirm the demo renders inline in the saved description.
-Report the URL, readiness, validation results, and any remaining work. For a
-text-only request, return the prepared title and body. Creating the PR does not
-authorize merging it; leave it open for review under the contribution guide.
+
+For every PR created or updated, complete the
+[CI completion requirements](../../../CONTRIBUTING.md#ci-completion). Read the
+latest head commit and wait for all configured checks and matrix jobs, including
+checks not required by branch protection. Do not finish with only a PR link or
+pending CI. If a check fails, inspect the logs, fix the cause in the same PR,
+run the applicable local checks, and push. Repeat until every check passes on
+the latest revision; earlier green runs are insufficient. Do not disable checks,
+weaken assertions, or rerun unexplained failures just to get a green result.
+
+Verify the head has not changed, then record the checked commit and CI run
+links/results in the PR and mark its CI checklist item complete. Investigate
+missing, skipped, cancelled, or timed-out checks; they are not passes. A confirmed
+infrastructure issue may justify a rerun. If an external blocker cannot be
+resolved with available access, keep the PR in draft, identify the affected
+checks and required intervention, and report the task as blocked rather than
+complete. For PR-text-only requests, describe available CI evidence and missing
+checks without pushing changes or rerunning remote jobs.
+
+Report the URL, readiness, verified commit, and validation results. Creating the
+PR does not authorize merging it; leave it open for review under the contribution
+guide.

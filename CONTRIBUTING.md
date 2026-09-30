@@ -106,6 +106,27 @@ the blocker in the PR and keep it in draft until the tested inline demo is
 available. For features without visual or interaction changes and no optional
 demo, mark the section as not applicable.
 
+## CI completion
+
+For every PR, including documentation-only PRs, the authoring agent must ensure
+all CI checks pass on the latest PR revision. After creating the PR and after
+every push, wait for every configured check and matrix job to finish, including
+checks not marked required by branch protection. Local validation or a green
+result from an earlier commit does not satisfy this requirement.
+
+If a check fails, inspect its logs, fix the cause in the same PR, run the
+applicable local checks, and push the fix. Continue checking and fixing until
+all CI checks pass. Do not stop after publishing the PR link or leave a failure
+for a separate follow-up PR. Do not disable checks, weaken assertions, or
+repeatedly rerun an unexplained failure just to obtain a green result.
+
+Record the verified commit and CI run links/results in the PR. Pending, missing,
+cancelled, skipped, or timed-out checks are not passing checks; investigate them.
+A confirmed infrastructure issue may justify a rerun. If an external blocker
+cannot be resolved with available access, keep the PR in draft, identify the
+affected checks and required intervention, and report validation as blocked.
+Never claim CI passed or the PR is complete until all checks actually pass.
+
 ## Review and merge
 
 - Request review once the change, its required validation, and any required
@@ -115,5 +136,5 @@ demo, mark the section as not applicable.
   for the latest revision. The [CI workflow](.github/workflows/ci.yml) checks
   formatting, Clippy, Rust 1.84 compatibility, and builds and tests on all six
   supported platform targets.
-- When code changes after validation, rerun the applicable checks and update
-  the PR's validation results.
+- After further pushes, repeat the [CI completion](#ci-completion) checks and
+  update the PR's validation results.
