@@ -35,6 +35,11 @@ For browser behavior changes, also exercise the relevant feature acceptance
 checks with mocked scan responses. For documentation-only edits, check links and
 consistency with the existing specs; Rust checks are unnecessary.
 
+## Pull requests
+
+- Follow the [contribution guide](CONTRIBUTING.md) when preparing or reviewing
+  GitHub pull requests, and use the [PR template](.github/pull_request_template.md).
+
 ## Keep documentation current
 
 - Update the owning feature spec when behavior changes, the README when usage

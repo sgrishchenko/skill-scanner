@@ -239,6 +239,9 @@ See the [feature specification index](spec/README.md) for behavior and acceptanc
 checks, and [implementation decisions](spec/implementation.md) for architecture
 and verification.
 
+For pull request scope, descriptions, validation, and review rules, see the
+[contribution guide](CONTRIBUTING.md).
+
 ## Releasing
 
 Update `Cargo.toml` and `Cargo.lock`, then push a matching `vVERSION` tag. The
