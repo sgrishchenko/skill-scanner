@@ -1,8 +1,8 @@
-# Skill Scanner CLI — initial specification
+# Skill Scanner CLI specification
 
-Status: initial draft. The product scope, Rust implementation language, and Linux,
-macOS, and Windows targets are confirmed. Detailed behavior and other technical
-recommendations remain proposals unless explicitly marked confirmed.
+Status: implemented. This document records the CLI behavior and shared scanning
+rules. The local browser interface is specified in [web.md](web.md). Technical
+choices and limits are recorded in [implementation.md](implementation.md).
 
 ## Goal
 
@@ -16,9 +16,9 @@ available and open the source files.
 | --- | --- | --- |
 | What counts as a skill? | A directory containing a file named exactly `SKILL.md` | Confirmed |
 | Which repositories are supported? | One public GitHub repository per invocation | Confirmed |
-| How are results consumed? | Browse discovered skills in a terminal listing | Confirmed |
+| How are results consumed? | Browse discovered skills in a terminal listing or local web interface | Implemented |
 
-## Proposed first-version scope
+## Implemented scan scope
 
 - Accept a GitHub repository URL or `owner/repo` identifier.
 - Scan the repository's default branch, resolving it to one commit for consistent results.
@@ -30,25 +30,29 @@ available and open the source files.
 
 Private repositories, multi-repository or organization-wide scans, and other
 agent configuration formats such as `AGENTS.md` and Cursor rules are outside
-the confirmed scope. JSON export is deferred based on the terminal-browsing choice.
+the supported scope. A CLI JSON export mode remains deferred; the web interface's
+internal JSON transport does not change the terminal report format.
 
-The proposed first version also excludes skill installation and execution,
+This version also excludes skill installation and execution,
 quality or security ratings, Git history, submodule contents, and local repository inputs.
 
-## Proposed command interface
+## Command interface
 
-The executable name `skill-scanner` is a placeholder.
+The executable is named `skill-scanner`.
 
 ```text
 skill-scanner scan OWNER/REPO
 skill-scanner scan https://github.com/OWNER/REPO
+skill-scanner serve
+skill-scanner serve --port 8080
 skill-scanner --help
 skill-scanner --version
 ```
 
-Branch, tag, and commit selection are deferred in the proposed first version.
+Branch, tag, and commit selection are deferred. `serve` runs the local browser
+interface; see [web.md](web.md) for its command, interaction, and API contract.
 
-## Proposed user flow and terminal report
+## User flow and terminal report
 
 1. Run `skill-scanner scan OWNER/REPO`.
 2. The application resolves the default branch to a commit and scans its contents.
@@ -78,7 +82,7 @@ Include the repository, scanned commit, and number of discovered skills.
 For a completed scan with no results, print `Skills found: 0` and
 `No SKILL.md files found.`
 
-## Proposed discovery and reporting rules
+## Discovery and reporting rules
 
 1. Treat each regular file named exactly `SKILL.md` as a candidate. Do not follow symlinks.
 2. Identify a candidate by its repository-relative file path; duplicate names
@@ -92,7 +96,7 @@ For a completed scan with no results, print `Skills found: 0` and
    produce a stable ordering. Link to files at the scanned commit.
 6. Distinguish a successful scan with zero candidates from a failed or incomplete scan.
 
-## Proposed error behavior
+## Error behavior
 
 | Exit code | Meaning |
 | --- | --- |
@@ -107,7 +111,7 @@ For a completed scan with no results, print `Skills found: 0` and
 - An empty repository is a successful scan with zero skills; report that there
   is no commit to scan instead of inventing a commit identifier.
 
-## Acceptance examples for the proposed scope
+## Acceptance examples
 
 - A repository with skills in two nested directories produces two results with
   their paths and links.
@@ -125,14 +129,14 @@ For a completed scan with no results, print `Skills found: 0` and
 
 ## Technical design
 
-| Decision | Choice or recommendation | Status |
+| Decision | Choice | Status |
 | --- | --- | --- |
 | Language | Rust | Confirmed |
-| Installation | Standalone executable; a Cargo-based source installation can be added | Proposed |
+| Installation | Standalone executable and `cargo install --path . --locked` | Implemented |
 | Supported operating systems | Linux, macOS, and Windows | Confirmed |
-| Repository access | GitHub API, without requiring a local Git installation | Proposed |
+| Repository access | GitHub API, without requiring a local Git installation | Implemented |
 
-If using the GitHub API, handle truncated directory listings explicitly so that
+Handle truncated GitHub API directory listings explicitly so that
 a large repository cannot silently produce an incomplete inventory. Allow an
 optional `GITHUB_TOKEN` for higher public-repository API limits; this does not add private
 repository support. Never include credentials in reports or diagnostics.
@@ -141,5 +145,5 @@ Use a Cargo binary crate. Keep command-line argument parsing, GitHub access,
 skill discovery/metadata parsing, and report rendering separate so the behavior
 can be tested using repository fixtures and mocked HTTP responses.
 
-Before implementation, define network timeouts, retry behavior, file-size limits,
-supported CPU architectures, and the release/install instructions for Rust.
+Network timeouts, retry behavior, file-size limits, supported CPU architectures,
+and release/install instructions are fixed in [implementation.md](implementation.md).

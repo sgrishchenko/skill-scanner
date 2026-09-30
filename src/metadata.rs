@@ -1,6 +1,6 @@
 use serde_yaml_ng::{Mapping, Value};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct MetadataWarning {
     pub field: &'static str,
     pub message: String,

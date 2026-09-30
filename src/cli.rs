@@ -17,4 +17,13 @@ pub enum Command {
         /// OWNER/REPO or https://github.com/OWNER/REPO
         repository: String,
     },
+    /// Serve a local web interface at http://127.0.0.1:3000
+    #[command(
+        after_help = "Open the printed URL in your browser. Press Ctrl+C to stop.\nAn optional GITHUB_TOKEN raises GitHub's public API limits."
+    )]
+    Serve {
+        /// Local port to listen on (use 0 to choose an available port)
+        #[arg(long, default_value_t = 3000)]
+        port: u16,
+    },
 }

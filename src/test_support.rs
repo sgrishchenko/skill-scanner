@@ -19,6 +19,9 @@ use crate::{
     report, scanner,
 };
 
+#[path = "web_tests.rs"]
+mod web;
+
 const COMMIT: &str = "1111111111111111111111111111111111111111";
 const ROOT: &str = "2222222222222222222222222222222222222222";
 const A: &str = "3333333333333333333333333333333333333333";

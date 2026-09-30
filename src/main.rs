@@ -10,21 +10,22 @@ use skill_scanner::{
     github::GitHubClient,
     report,
     repository::Repository,
-    scanner,
+    scanner, web,
 };
 
 fn main() -> ExitCode {
-    let Cli {
-        command: Command::Scan { repository },
-    } = Cli::parse();
+    let Cli { command } = Cli::parse();
     // Parse separately so clap does not echo rejected URLs, which could contain
     // credentials, into diagnostics.
-    let repository = match repository.parse::<Repository>() {
-        Ok(repository) => repository,
-        Err(error) => {
-            let _ = writeln!(io::stderr().lock(), "error: {error}");
-            return ExitCode::from(2);
-        }
+    let repository = match &command {
+        Command::Scan { repository } => match repository.parse::<Repository>() {
+            Ok(repository) => Some(repository),
+            Err(error) => {
+                let _ = writeln!(io::stderr().lock(), "error: {error}");
+                return ExitCode::from(2);
+            }
+        },
+        Command::Serve { .. } => None,
     };
     let token = match env::var("GITHUB_TOKEN") {
         Ok(token) if !token.trim().is_empty() => Some(token),
@@ -37,11 +38,32 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let result = GitHubClient::new(token.as_deref()).and_then(|client| {
-        scanner::scan_with_progress(&client, &repository, |progress| {
+    let client = match GitHubClient::new(token.as_deref()) {
+        Ok(client) => client,
+        Err(error) => {
+            let _ = writeln!(io::stderr().lock(), "error: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Command::Serve { port } = command {
+        return match web::serve(port, client) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                let _ = writeln!(
+                    io::stderr().lock(),
+                    "error: could not run the web interface: {error}"
+                );
+                ExitCode::FAILURE
+            }
+        };
+    }
+    let result = scanner::scan_with_progress(
+        &client,
+        &repository.expect("scan command has a repository"),
+        |progress| {
             let _ = report::write_progress(&mut io::stderr().lock(), progress);
-        })
-    });
+        },
+    );
     match result {
         Ok(inventory) => {
             let stderr = io::stderr();

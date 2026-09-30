@@ -4,6 +4,7 @@ pub mod metadata;
 pub mod report;
 pub mod repository;
 pub mod scanner;
+pub mod web;
 
 use std::fmt;
 

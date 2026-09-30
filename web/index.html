@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f2">
+    <meta name="description" content="Discover the AI skills in a public GitHub repository.">
+    <title>Skill Scanner — Repository explorer</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/app.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Skill Scanner home">
+        <img src="/favicon.svg" width="34" height="34" alt="">
+        <span>Skill Scanner<span class="brand-divider">/</span><span class="brand-subtitle">Repository explorer</span></span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#how-it-works">How it works <span aria-hidden="true">↗</span></a>
+        <span class="local-badge"><span class="dot"></span>Local workspace</span>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow"><span></span> A LITTLE DISCOVERY. A LOT OF POSSIBILITY.</p>
+        <h1 id="page-title">Your next skill is<br> already out there<span class="accent">.</span></h1>
+        <p class="intro-copy">Explore the AI skills inside any public GitHub repository.<br> Find what’s useful. Go straight to the source.</p>
+        <div class="intro-decoration" aria-hidden="true"><span>SKILL.md</span><span>name: possibilities<br>description: a new way to work</span><i>↗</i></div>
+      </section>
+
+      <section class="scan-panel" aria-labelledby="scan-title">
+        <div class="section-label"><span class="section-number">01</span><h2 id="scan-title">Start with a repository</h2><span class="public-label">Public repositories</span></div>
+        <form id="scan-form">
+          <label for="repository">GitHub repository</label>
+          <div class="input-row">
+            <div class="repository-field"><span aria-hidden="true">⌘</span><input id="repository" name="repository" type="text" placeholder="owner/repository or https://github.com/owner/repository" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="512" aria-describedby="repository-hint"></div>
+            <button class="primary-button" id="scan-button" type="submit"><span id="scan-button-text">Scan repository</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+          </div>
+          <div class="form-bottom"><p id="repository-hint">We’ll explore the default branch and find every <code>SKILL.md</code>.</p><div class="examples"><span>Try</span><button type="button" data-repository="anthropics/skills">anthropics/skills <span aria-hidden="true">↗</span></button><button type="button" data-repository="openai/skills">openai/skills <span aria-hidden="true">↗</span></button></div></div>
+        </form>
+        <noscript><p class="error-panel">Enable JavaScript to scan repositories in this interface, or use <code>skill-scanner scan OWNER/REPO</code> in a terminal.</p></noscript>
+        <div id="error" class="error-panel" role="alert" tabindex="-1" hidden><strong>Scan couldn’t finish</strong><p id="error-message"></p></div>
+        <div id="progress-panel" class="progress-panel" hidden>
+          <div class="progress-heading"><span class="spinner" aria-hidden="true"></span><p id="progress-message" role="status" aria-live="polite">Connecting to GitHub…</p><span id="progress-count"></span></div>
+          <progress id="scan-progress" aria-label="Scan progress"></progress>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <section class="results-section" aria-labelledby="results-title" aria-busy="false" id="results-section">
+          <div class="section-label results-heading"><span class="section-number">02</span><h2 id="results-title">Discovered skills</h2><span id="results-status" class="quiet-label">Ready when you are</span></div>
+
+          <div id="initial-state" class="empty-state">
+            <div class="file-illustration" aria-hidden="true"><div class="file-back"></div><div class="file-front"><span>✳</span><b>SKILL.md</b><i></i><i></i></div><span class="file-plus">+</span></div>
+            <h3>A repository of possibilities</h3>
+            <p>Enter a repository above to discover its skills.<br> Names, descriptions, and source links will appear here.</p>
+            <span class="empty-note"><span class="dot"></span>Read-only discovery. Nothing is installed or run.</span>
+          </div>
+
+          <div id="scan-results" hidden>
+            <div class="inventory-summary">
+              <div><p class="summary-label">REPOSITORY</p><h3 id="result-repository"></h3><p id="result-commit" class="commit"></p></div>
+              <div class="summary-numbers"><div><strong id="skill-count">0</strong><span>skills found</span></div><div><strong id="warning-count">0</strong><span>with warnings</span></div></div>
+            </div>
+            <div id="filters" class="filters"><label class="search-field"><span aria-hidden="true">⌕</span><span class="sr-only">Search skills</span><input id="search" type="search" placeholder="Search names, descriptions, or paths…" autocomplete="off"></label><label class="warning-filter"><input id="warnings-only" type="checkbox">With warnings</label></div>
+            <p id="result-count" class="result-count" role="status" aria-live="polite"></p>
+            <div id="skill-list" class="skill-list"></div>
+            <div id="no-results" class="no-results" hidden><h3 id="empty-title"></h3><p id="empty-description"></p><button id="clear-filters" class="text-button" type="button" hidden>Clear filters <span aria-hidden="true">↗</span></button></div>
+          </div>
+        </section>
+
+        <aside id="how-it-works" class="guide" aria-labelledby="guide-title">
+          <p class="eyebrow">UNDER THE HOOD</p>
+          <h2 id="guide-title">Small files.<br> Useful possibilities.</h2>
+          <p>A skill is a set of instructions that helps an AI agent do something specific.</p>
+          <ol class="steps">
+            <li><span>1</span><div><h3>Find the files</h3><p>We look for <code>SKILL.md</code> across the entire repository, including hidden folders.</p></div></li>
+            <li><span>2</span><div><h3>Read the details</h3><p>Names and descriptions come from each file’s YAML metadata.</p></div></li>
+            <li><span>3</span><div><h3>Explore the source</h3><p>Every result links to the exact commit we scanned on GitHub.</p></div></li>
+          </ol>
+          <div class="guide-note"><span aria-hidden="true">ⓘ</span><p>Discovery is a starting point. Review a skill’s source before deciding to use it.</p></div>
+          <details class="access-help"><summary>About GitHub access</summary><p>Public repositories work without credentials, within GitHub’s API limits. For higher limits, set <code>GITHUB_TOKEN</code> before starting the app. The token stays on this machine.</p><p>One scan runs at a time. Closing this page discards its results; a running scan finishes in the background.</p></details>
+        </aside>
+      </div>
+    </main>
+    <footer><span>Built for the curious.</span><span>Public GitHub repositories<span class="footer-dot">·</span>Read-only by design</span></footer>
+  </body>
+</html>

@@ -14,7 +14,7 @@ pub struct Inventory {
     pub skills: Vec<Skill>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct Skill {
     pub path: String,
     pub name: String,

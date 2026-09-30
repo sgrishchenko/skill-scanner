@@ -1,12 +1,13 @@
 # Skill Scanner
 
-A Rust command-line application that discovers AI skills in **one public GitHub
-repository**. A skill is any directory containing a regular file named exactly
+A Rust application with a CLI and local web interface that discovers AI skills in
+**one public GitHub repository**. A skill is any directory containing a regular file named exactly
 `SKILL.md`, including the repository root and hidden directories.
 
 ```console
 skill-scanner scan OWNER/REPO
 skill-scanner scan https://github.com/OWNER/REPO
+skill-scanner serve
 skill-scanner --help
 skill-scanner --version
 ```
@@ -48,7 +49,33 @@ The workflows build and test natively on Ubuntu 24.04, macOS 15, Windows Server
 systems supported by their installed Rust toolchain. Release binaries are not
 code-signed or notarized.
 
-## Output
+## Web interface
+
+Start the local interface and open the URL printed in your terminal:
+
+```sh
+skill-scanner serve
+# From source:
+cargo run --locked -- serve
+```
+
+By default, visit **http://127.0.0.1:3000**. Use `--port 8080` to choose another
+port, or `--port 0` to choose an available port. Press Ctrl+C to stop the server.
+The interface is available only on your machine. Its assets are embedded in the
+executable, so no Node.js installation or separate frontend build is needed.
+
+Enter a public GitHub repository, follow live scan progress, and browse skill
+names, descriptions, paths, metadata warnings, and links to the scanned commit.
+Search the results or filter to skills with warnings. Empty repositories, zero
+matches, and failures are shown separately; partial inventories are never shown.
+
+The browser uses the same scanner and GitHub limits as the CLI. To raise the
+limits, set `GITHUB_TOKEN` in the environment before starting the server; the
+token stays in the server process. Only one scan runs at a time across all tabs.
+Results stay in page memory and disappear on reload. Closing a page lets its
+current scan finish in the background before another scan can start.
+
+## Terminal output
 
 While scanning, the CLI prints progress to **stderr** before each operation,
 including the current directory during large-repository discovery and each
@@ -127,7 +154,7 @@ metadata warnings; API responses over 32 MiB fail the scan.
 
 The input accepts `owner/repo` or an HTTPS `github.com` repository URL with an
 optional `.git` suffix or trailing slash. Branch/file URLs, local repositories,
-multiple repositories, installation, execution, and JSON export are outside
+multiple repositories, installation, execution, and CLI JSON export are outside
 this version's scope.
 
 ## Development
@@ -144,7 +171,8 @@ or tokens. Keep `Cargo.lock` checked in; it includes a `yoke-derive` version
 compatible with Rust 1.84 (0.8.3 incorrectly uses a newer standard-library API).
 
 Modules separate argument parsing, repository input, GitHub transport, discovery,
-metadata, and rendering. See the [product specification](spec/cli.md) and
+metadata, terminal rendering, and the web server. Browser assets live in `web/`.
+See the [CLI specification](spec/cli.md), [web specification](spec/web.md), and
 [implementation decisions](spec/implementation.md).
 
 ## Releasing
