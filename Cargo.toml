@@ -1,0 +1,21 @@
+[package]
+name = "skill-scanner"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+description = "Discover AI skills in a public GitHub repository"
+license = "MIT"
+readme = "README.md"
+
+[dependencies]
+base64 = "0.22"
+clap = { version = "4.5", features = ["derive"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml_ng = "0.10"
+
+[profile.release]
+lto = "thin"
+strip = true
+
