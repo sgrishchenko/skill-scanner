@@ -82,6 +82,12 @@ impl Server {
             while !stop.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        // Windows and macOS can inherit the listener's nonblocking
+                        // mode; the request reader and response writer are blocking.
+                        stream.set_nonblocking(false).unwrap();
+                        // Keep separately written headers and bodies independent of
+                        // Nagle's algorithm and platform-specific delayed ACK timers.
+                        stream.set_nodelay(true).unwrap();
                         stream
                             .set_read_timeout(Some(Duration::from_secs(2)))
                             .unwrap();
@@ -666,10 +672,12 @@ fn encodes_default_branch_and_rejects_corrupt_listing_and_blob_data() {
 #[test]
 fn request_timeout_covers_headers_and_body_together() {
     let mut slow = repository();
-    slow.delay = Duration::from_millis(120);
-    slow.body_delay = Duration::from_millis(120);
+    // Each stage fits within the timeout, but their sum does not. Leave enough
+    // scheduling margin for CI runners and for the retry to finish successfully.
+    slow.delay = Duration::from_millis(600);
+    slow.body_delay = Duration::from_millis(600);
     let server = Server::start(vec![slow, repository()]);
-    let client = GitHubClient::for_test(server.url.clone(), None, Duration::from_millis(200), 1024);
+    let client = GitHubClient::for_test(server.url.clone(), None, Duration::from_secs(1), 1024);
     client
         .repository(&"example/skills".parse().unwrap())
         .unwrap();

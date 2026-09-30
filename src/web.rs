@@ -146,9 +146,7 @@ async fn local_request(request: Request, next: Next, port: u16) -> Response {
     let valid_origin = request
         .headers()
         .get(header::ORIGIN)
-        .map_or(true, |origin| {
-            host.is_some_and(|host| origin == format!("http://{host}").as_str())
-        });
+        .is_none_or(|origin| host.is_some_and(|host| origin == format!("http://{host}").as_str()));
     let valid_action = request.method() != axum::http::Method::POST
         || request
             .headers()
