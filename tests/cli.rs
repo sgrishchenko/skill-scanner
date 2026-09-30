@@ -4,6 +4,8 @@ fn run(args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
         .args(args)
         .env_remove("GITHUB_TOKEN")
+        .env("SKILL_SCANNER_HISTORY_DIR", "")
+        .env("SKILL_SCANNER_CACHE_DIR", "")
         .output()
         .unwrap()
 }
@@ -14,6 +16,8 @@ fn help_and_version_succeed_without_network_or_credentials() {
         &["--help"][..],
         &["scan", "--help"][..],
         &["serve", "--help"][..],
+        &["recent", "--help"][..],
+        &["recent", "remove", "--help"][..],
         &["--version"][..],
     ] {
         let output = run(args);
@@ -36,12 +40,79 @@ fn invalid_usage_exits_two_and_never_prints_an_inventory() {
         &["serve", "--port", "65536"][..],
         &["serve", "--port", "invalid"][..],
         &["serve", "--host", "0.0.0.0"][..],
+        &["recent", "remove"][..],
+        &["recent", "remove", "../escape"][..],
     ] {
         let output = run(args);
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
         assert!(!output.stderr.is_empty());
     }
+}
+
+#[test]
+fn recent_commands_persist_removal_and_work_without_valid_github_credentials() {
+    use skill_scanner::{recent::RecentRepositories, scanner::Inventory};
+    let directory =
+        std::env::temp_dir().join(format!("skill-scanner-cli-recent-{}", std::process::id()));
+    struct Directory(std::path::PathBuf);
+    impl Drop for Directory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    std::fs::create_dir(&directory).unwrap();
+    let directory = Directory(directory);
+    let recent = RecentRepositories::new(directory.0.clone());
+    recent
+        .record(&Inventory {
+            repository: "example/skills".parse().unwrap(),
+            commit: None,
+            skills: vec![],
+        })
+        .unwrap();
+    let invoke = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
+            .args(args)
+            .env("SKILL_SCANNER_HISTORY_DIR", &directory.0)
+            .env("GITHUB_TOKEN", "secret\ninvalid-header")
+            .output()
+            .unwrap()
+    };
+    let output = invoke(&["recent"]);
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("example/skills  (0 skills)"));
+    assert!(output.stderr.is_empty());
+    let output = invoke(&["recent", "remove", "https://github.com/EXAMPLE/Skills.git/"]);
+    assert!(output.status.success());
+    assert!(recent.list().unwrap().is_empty());
+    let output = invoke(&["recent"]);
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("No recently scanned repositories."));
+    let output = invoke(&["recent", "remove", "https://user:secret@github.com/a/b"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(!String::from_utf8(output.stderr).unwrap().contains("secret"));
+    let output = Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
+        .arg("recent")
+        .env("SKILL_SCANNER_HISTORY_DIR", "")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("disabled"));
+    let file = directory.0.join("file");
+    std::fs::write(&file, "file").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
+        .arg("recent")
+        .env("SKILL_SCANNER_HISTORY_DIR", file)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
 }
 
 #[test]
@@ -87,6 +158,8 @@ fn serve_starts_on_an_available_port_and_serves_assets_from_any_directory() {
         Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
             .args(["serve", "--port", "0"])
             .env_remove("GITHUB_TOKEN")
+            .env("SKILL_SCANNER_HISTORY_DIR", "")
+            .env("SKILL_SCANNER_CACHE_DIR", "")
             .current_dir(std::env::temp_dir())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())

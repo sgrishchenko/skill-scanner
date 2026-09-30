@@ -2,6 +2,7 @@ use std::io::{self, Write};
 
 use crate::{
     aggregation,
+    recent::RecentRepository,
     scanner::{Inventory, ScanProgress},
 };
 
@@ -40,6 +41,9 @@ pub fn write_progress(mut output: impl Write, progress: ScanProgress<'_>) -> io:
                 terminal_text(commit)
             )?;
         }
+        ScanProgress::HistoryWarning(message) => {
+            writeln!(output, "warning: {}", terminal_text(message))?;
+        }
         ScanProgress::DiscoveringSkills => {
             writeln!(output, "Discovering SKILL.md files: /")?;
         }
@@ -59,6 +63,32 @@ pub fn write_progress(mut output: impl Write, progress: ScanProgress<'_>) -> io:
         }
     }
     output.flush()
+}
+
+pub fn write_recent(
+    mut output: impl Write,
+    entries: &[RecentRepository],
+    enabled: bool,
+) -> io::Result<()> {
+    if !enabled {
+        writeln!(
+            output,
+            "Recent repositories are disabled. Set SKILL_SCANNER_HISTORY_DIR to enable them."
+        )?;
+    } else if entries.is_empty() {
+        writeln!(output, "No recently scanned repositories.")?;
+    } else {
+        writeln!(output, "Recent repositories (newest first):")?;
+        for entry in entries {
+            writeln!(
+                output,
+                "{}  ({} skills)",
+                terminal_text(&entry.repository),
+                entry.skill_count
+            )?;
+        }
+    }
+    Ok(())
 }
 
 pub fn write_report(mut output: impl Write, inventory: &Inventory) -> io::Result<()> {

@@ -4,6 +4,8 @@ const $ = (id) => document.getElementById(id);
 let inventory = null;
 let busy = false;
 let groupedView = true;
+let recentRequest = 0;
+const removingRepositories = new Set();
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -30,9 +32,93 @@ function setBusy(value) {
   $("scan-button").disabled = value;
   $("repository").disabled = value;
   document.querySelectorAll("[data-repository]").forEach((button) => { button.disabled = value; });
+  document.querySelectorAll("[data-remove-repository]").forEach((button) => {
+    button.disabled = value || removingRepositories.has(button.dataset.removeRepository);
+  });
   $("scan-button-text").textContent = value ? "Scanning…" : "Scan repository";
   $("results-section").setAttribute("aria-busy", String(value));
   $("progress-panel").hidden = !value;
+}
+
+function selectRepository(repository) {
+  if (busy) return;
+  $("repository").value = repository;
+  $("repository").focus();
+}
+
+function showRecentError(message) {
+  $("recent-error").textContent = message;
+  $("recent-error").hidden = false;
+}
+
+async function refreshRecent() {
+  const request = ++recentRequest;
+  try {
+    const response = await fetch("/api/recent", { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not load recent repositories. Try refreshing the list.");
+    const result = await response.json();
+    if (request !== recentRequest) return;
+    const list = document.createDocumentFragment();
+    for (const recent of result.repositories) {
+      const row = node("li", "recent-row");
+      const select = node("button", "recent-repository", recent.repository);
+      select.type = "button";
+      select.dataset.repository = recent.repository;
+      select.disabled = busy;
+      select.setAttribute("aria-label", `Use ${recent.repository} for another scan`);
+      select.addEventListener("click", () => selectRepository(recent.repository));
+      const details = node("div", "recent-details");
+      details.append(select);
+      const scannedAt = new Date(recent.scanned_at);
+      const summary = node("p", "recent-hint", `${recent.skill_count} skill${recent.skill_count === 1 ? "" : "s"} · Last scanned `);
+      const time = node("time", "", scannedAt.toLocaleString());
+      time.dateTime = scannedAt.toISOString();
+      summary.append(time);
+      details.append(summary);
+      const remove = node("button", "text-button", "Remove");
+      remove.type = "button";
+      remove.dataset.removeRepository = recent.repository;
+      remove.disabled = busy || removingRepositories.has(recent.repository);
+      remove.setAttribute("aria-label", `Remove ${recent.repository} from recent repositories`);
+      remove.addEventListener("click", () => removeRecent(recent.repository));
+      row.append(details, remove);
+      list.append(row);
+    }
+    $("recent-list").replaceChildren(list);
+    $("recent-status").textContent = !result.enabled
+      ? "Recent repositories are disabled on this server."
+      : result.repositories.length ? "Most recently scanned first." : "No recently scanned repositories yet.";
+    return true;
+  } catch (error) {
+    if (request !== recentRequest) return;
+    $("recent-status").textContent = "Recent repositories are unavailable.";
+    showRecentError(error instanceof TypeError ? "Could not connect to the local server. Retry when it is running." : error.message);
+  }
+}
+
+async function removeRecent(repository) {
+  if (busy || removingRepositories.has(repository)) return;
+  removingRepositories.add(repository);
+  setBusy(busy);
+  $("recent-error").hidden = true;
+  try {
+    const response = await fetch("/api/recent/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Skill-Scanner": "1" },
+      body: JSON.stringify({ repository }),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Could not remove the repository. Try again.");
+    if (await refreshRecent()) {
+      $("recent-status").textContent = `Removed ${repository} from recent repositories.`;
+    }
+    $("refresh-recent").focus();
+  } catch (error) {
+    showRecentError(error instanceof TypeError ? "Could not connect to the local server. Retry when it is running." : error.message);
+  } finally {
+    removingRepositories.delete(repository);
+    setBusy(busy);
+  }
 }
 
 function showError(message) {
@@ -198,6 +284,7 @@ async function readScan(response) {
     const event = JSON.parse(line);
     if (event.type === "error") throw new Error(event.message);
     if (event.type === "progress") updateProgress(event);
+    if (event.type === "history_warning") showRecentError(event.message);
     if (event.type === "complete") {
       renderInventory(event.inventory);
       completed = true;
@@ -229,6 +316,7 @@ $("scan-form").addEventListener("submit", async (event) => {
   if (!repository) { $("repository").focus(); return; }
   inventory = null;
   $("error").hidden = true;
+  $("recent-error").hidden = true;
   $("scan-results").hidden = true;
   $("initial-state").hidden = true;
   $("search").value = "";
@@ -259,13 +347,13 @@ $("scan-form").addEventListener("submit", async (event) => {
     showError(message);
   } finally {
     setBusy(false);
+    await refreshRecent();
   }
 });
 
 document.querySelectorAll("[data-repository]").forEach((button) => {
   button.addEventListener("click", () => {
-    $("repository").value = button.dataset.repository;
-    $("repository").focus();
+    selectRepository(button.dataset.repository);
   });
 });
 $("search").addEventListener("input", renderSkills);
@@ -280,3 +368,10 @@ $("clear-filters").addEventListener("click", () => {
   renderSkills();
   $("search").focus();
 });
+
+$("refresh-recent").addEventListener("click", () => {
+  $("recent-error").hidden = true;
+  refreshRecent();
+});
+window.addEventListener("focus", () => { if (!busy) refreshRecent(); });
+refreshRecent();

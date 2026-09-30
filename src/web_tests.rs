@@ -18,6 +18,20 @@ fn with_web_cache(
     cache: crate::cache::ScanCache,
     test: impl FnOnce(Router, &tokio::runtime::Runtime),
 ) {
+    with_web_storage(
+        replies,
+        cache,
+        crate::recent::RecentRepositories::disabled(),
+        test,
+    );
+}
+
+fn with_web_storage(
+    replies: Vec<Reply>,
+    cache: crate::cache::ScanCache,
+    recent: crate::recent::RecentRepositories,
+    test: impl FnOnce(Router, &tokio::runtime::Runtime),
+) {
     let server = Server::start(replies);
     // The blocking reqwest client must be created and dropped outside Tokio.
     let client = Arc::new(server.client());
@@ -25,7 +39,10 @@ fn with_web_cache(
         .enable_all()
         .build()
         .unwrap();
-    test(crate::web::router(client.clone(), 3000, cache), &runtime);
+    test(
+        crate::web::router(client.clone(), 3000, cache, recent),
+        &runtime,
+    );
     drop(runtime);
     server.finish();
 }
@@ -144,7 +161,12 @@ fn default_http_port_accepts_the_hosts_and_origins_browsers_send() {
         .build()
         .unwrap();
     runtime.block_on(async {
-        let app = crate::web::router(client.clone(), 80, crate::cache::ScanCache::disabled());
+        let app = crate::web::router(
+            client.clone(),
+            80,
+            crate::cache::ScanCache::disabled(),
+            crate::recent::RecentRepositories::disabled(),
+        );
         for host in ["127.0.0.1", "localhost"] {
             let mut request = request("GET", "/", "");
             request.headers_mut().insert("host", host.parse().unwrap());
@@ -384,9 +406,10 @@ fn concurrent_scans_are_rejected_and_disconnect_releases_capacity_after_completi
     ));
     replies.extend((0..10).map(|_| blob(A, VALID)));
     replies.extend(snapshot());
-    with_web_cache(
+    with_web_storage(
         replies,
-        crate::cache::ScanCache::new(directory.0.clone()),
+        crate::cache::ScanCache::new(directory.0.join("cache")),
+        crate::recent::RecentRepositories::new(directory.0.join("recent")),
         |app, runtime| {
             runtime.block_on(async {
                 let first = app.clone().oneshot(scan_request()).await.unwrap();
@@ -406,6 +429,11 @@ fn concurrent_scans_are_rejected_and_disconnect_releases_capacity_after_completi
                 })
                 .await
                 .unwrap();
+                // The disconnected scan saved its summary before releasing capacity.
+                assert_eq!(
+                    recent_list(&app).await["repositories"][0]["skill_count"],
+                    10
+                );
                 let events = events(response).await;
                 assert_eq!(events.last().unwrap()["type"], "complete");
                 assert_eq!(
@@ -467,7 +495,12 @@ fn cli_and_web_share_commit_validated_analysis_across_cache_instances() {
         .build()
         .unwrap();
     let refreshed = runtime.block_on(async {
-        let app = crate::web::router(client.clone(), 3000, ScanCache::new(directory.0.clone()));
+        let app = crate::web::router(
+            client.clone(),
+            3000,
+            ScanCache::new(directory.0.clone()),
+            crate::recent::RecentRepositories::disabled(),
+        );
         let cached = events(app.clone().oneshot(scan_request()).await.unwrap()).await;
         assert_eq!(cached.len(), 4);
         assert_eq!(
@@ -508,4 +541,185 @@ fn cli_and_web_share_commit_validated_analysis_across_cache_instances() {
     );
     assert_eq!(cli_inventory.commit.as_deref(), Some(D));
     assert_eq!(server.finish().len(), 12);
+}
+
+async fn recent_list(app: &Router) -> Value {
+    let response = app
+        .clone()
+        .oneshot(request("GET", "/api/recent", ""))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    serde_json::from_slice(&to_bytes(response.into_body(), 4096).await.unwrap()).unwrap()
+}
+
+#[test]
+fn recent_api_shares_disk_state_records_scans_and_persists_removal() {
+    use crate::{cache::ScanCache, recent::RecentRepositories};
+    let directory = TestDirectory::new();
+    let recent = RecentRepositories::new(directory.0.clone());
+    // A CLI scan and web server use independent store instances.
+    let mut replies = snapshot();
+    replies.push(tree(ROOT, true, false, vec![]));
+    let server = Server::start(replies);
+    scanner::scan_with_storage(
+        &server.client(),
+        &"example/skills".parse().unwrap(),
+        &ScanCache::disabled(),
+        &recent,
+        |_| {},
+    )
+    .unwrap();
+    server.finish();
+    let mut replies = snapshot();
+    replies.extend([
+        tree(ROOT, true, false, vec![skill("SKILL.md", A)]),
+        blob(A, VALID),
+    ]);
+    with_web_storage(
+        replies,
+        ScanCache::disabled(),
+        RecentRepositories::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                let list = recent_list(&app).await;
+                assert_eq!(list["enabled"], true);
+                assert_eq!(list["repositories"][0]["repository"], "example/skills");
+                assert_eq!(list["repositories"][0]["skill_count"], 0);
+                let scan = events(app.clone().oneshot(scan_request()).await.unwrap()).await;
+                assert_eq!(scan.last().unwrap()["type"], "complete");
+                assert_eq!(recent_list(&app).await["repositories"][0]["skill_count"], 1);
+                assert_eq!(recent.list().unwrap().len(), 1);
+                for _ in 0..2 {
+                    let response = app
+                        .clone()
+                        .oneshot(request(
+                            "POST",
+                            "/api/recent/remove",
+                            r#"{"repository":"https://github.com/EXAMPLE/Skills.git/"}"#,
+                        ))
+                        .await
+                        .unwrap();
+                    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+                }
+                assert_eq!(recent_list(&app).await["repositories"], json!([]));
+            });
+        },
+    );
+    with_web_storage(
+        vec![],
+        ScanCache::disabled(),
+        RecentRepositories::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                assert_eq!(recent_list(&app).await["repositories"], json!([]));
+            });
+        },
+    );
+    assert!(recent.list().unwrap().is_empty());
+}
+
+#[test]
+fn recent_removal_has_the_same_input_and_browser_protections_as_scan() {
+    with_web(vec![], |app, runtime| {
+        runtime.block_on(async {
+            assert_eq!(
+                recent_list(&app).await,
+                json!({"enabled":false,"repositories":[]})
+            );
+            let valid = r#"{"repository":"example/skills"}"#;
+            let mut missing_header = request("POST", "/api/recent/remove", valid);
+            missing_header.headers_mut().remove("x-skill-scanner");
+            let mut foreign = request("POST", "/api/recent/remove", valid);
+            foreign
+                .headers_mut()
+                .insert("origin", "https://foreign.example".parse().unwrap());
+            let mut foreign_host = request("GET", "/api/recent", "");
+            foreign_host
+                .headers_mut()
+                .insert("host", "foreign.example:3000".parse().unwrap());
+            for request in [missing_header, foreign, foreign_host] {
+                assert_eq!(
+                    app.clone().oneshot(request).await.unwrap().status(),
+                    StatusCode::FORBIDDEN
+                );
+            }
+            for (body, status) in [
+                (
+                    r#"{"repository":"https://user:secret@github.com/a/b"}"#,
+                    StatusCode::BAD_REQUEST,
+                ),
+                (r#"{"repository":"../escape"}"#, StatusCode::BAD_REQUEST),
+                (
+                    r#"{"repository":"a/b","unknown":true}"#,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                ),
+                ("{}", StatusCode::UNPROCESSABLE_ENTITY),
+                ("broken", StatusCode::BAD_REQUEST),
+            ] {
+                let response = app
+                    .clone()
+                    .oneshot(request("POST", "/api/recent/remove", body))
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), status);
+                let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+                assert!(!std::str::from_utf8(&bytes).unwrap().contains("secret"));
+            }
+            assert_eq!(
+                app.clone()
+                    .oneshot(request("POST", "/api/recent/remove", &"x".repeat(4097)))
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::PAYLOAD_TOO_LARGE
+            );
+            let mut missing_content_type = request("POST", "/api/recent/remove", valid);
+            missing_content_type.headers_mut().remove("content-type");
+            assert_eq!(
+                app.oneshot(missing_content_type).await.unwrap().status(),
+                StatusCode::UNSUPPORTED_MEDIA_TYPE
+            );
+        });
+    });
+}
+
+#[test]
+fn unavailable_history_returns_errors_and_a_warning_without_losing_scan_results() {
+    let directory = TestDirectory::new();
+    let path = directory.0.join("file");
+    std::fs::write(&path, "not a directory").unwrap();
+    let mut replies = snapshot();
+    replies.push(tree(ROOT, true, false, vec![]));
+    with_web_storage(
+        replies,
+        crate::cache::ScanCache::disabled(),
+        crate::recent::RecentRepositories::new(path),
+        |app, runtime| {
+            runtime.block_on(async {
+                for (method, path, body) in [
+                    ("GET", "/api/recent", ""),
+                    (
+                        "POST",
+                        "/api/recent/remove",
+                        r#"{"repository":"example/skills"}"#,
+                    ),
+                ] {
+                    assert_eq!(
+                        app.clone()
+                            .oneshot(request(method, path, body))
+                            .await
+                            .unwrap()
+                            .status(),
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    );
+                }
+                let events = events(app.oneshot(scan_request()).await.unwrap()).await;
+                assert!(events
+                    .iter()
+                    .any(|event| event["type"] == "history_warning"));
+                assert_eq!(events.last().unwrap()["type"], "complete");
+            });
+        },
+    );
 }

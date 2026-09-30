@@ -17,6 +17,7 @@ use crate::{
     aggregation::{self, Aggregation},
     cache::ScanCache,
     github::GitHubClient,
+    recent::RecentRepositories,
     report,
     repository::Repository,
     scanner::{self, Inventory, ScanProgress, Skill},
@@ -28,6 +29,7 @@ const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-
 struct WebState {
     client: Arc<GitHubClient>,
     cache: ScanCache,
+    recent: RecentRepositories,
     available: Arc<Semaphore>,
 }
 
@@ -64,6 +66,9 @@ enum Event {
         current: Option<usize>,
         total: Option<usize>,
     },
+    HistoryWarning {
+        message: String,
+    },
     Complete {
         inventory: WebInventory,
     },
@@ -92,13 +97,23 @@ pub fn serve(port: u16, client: GitHubClient) -> io::Result<()> {
         let listener = tokio::net::TcpListener::from_std(listener)?;
         axum::serve(
             listener,
-            router(client.clone(), port, ScanCache::from_environment()),
+            router(
+                client.clone(),
+                port,
+                ScanCache::from_environment(),
+                RecentRepositories::from_environment(),
+            ),
         )
         .await
     })
 }
 
-pub(crate) fn router(client: Arc<GitHubClient>, port: u16, cache: ScanCache) -> Router {
+pub(crate) fn router(
+    client: Arc<GitHubClient>,
+    port: u16,
+    cache: ScanCache,
+    recent: RecentRepositories,
+) -> Router {
     Router::new()
         .route(
             "/",
@@ -127,10 +142,13 @@ pub(crate) fn router(client: Arc<GitHubClient>, port: u16, cache: ScanCache) -> 
             get(|| async { asset("image/svg+xml", include_str!("../web/favicon.svg")) }),
         )
         .route("/api/scan", post(scan))
+        .route("/api/recent", get(list_recent))
+        .route("/api/recent/remove", post(remove_recent))
         .fallback(|| async { error(StatusCode::NOT_FOUND, "Page not found.") })
         .with_state(WebState {
             client,
             cache,
+            recent,
             available: Arc::new(Semaphore::new(1)),
         })
         .layer(DefaultBodyLimit::max(4096))
@@ -191,6 +209,45 @@ fn error(status: StatusCode, message: &str) -> Response {
     (status, Json(serde_json::json!({ "message": message }))).into_response()
 }
 
+async fn list_recent(State(state): State<WebState>) -> Response {
+    let enabled = state.recent.is_enabled();
+    match tokio::task::spawn_blocking(move || state.recent.list()).await {
+        Ok(Ok(repositories)) => Json(serde_json::json!({
+            "enabled": enabled,
+            "repositories": repositories,
+        }))
+        .into_response(),
+        _ => history_error(),
+    }
+}
+
+async fn remove_recent(
+    State(state): State<WebState>,
+    body: Result<Json<ScanRequest>, JsonRejection>,
+) -> Response {
+    let input = match body {
+        Ok(Json(input)) => input,
+        Err(rejection) => {
+            return error(
+                rejection.status(),
+                "Send a JSON object with one repository field (maximum 4 KiB).",
+            )
+        }
+    };
+    let repository = match input.repository.trim().parse::<Repository>() {
+        Ok(repository) => repository,
+        Err(message) => return error(StatusCode::BAD_REQUEST, &message),
+    };
+    match tokio::task::spawn_blocking(move || state.recent.remove(&repository)).await {
+        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        _ => history_error(),
+    }
+}
+
+fn history_error() -> Response {
+    error(StatusCode::INTERNAL_SERVER_ERROR, "Could not access recent repositories. Check SKILL_SCANNER_HISTORY_DIR and directory permissions.")
+}
+
 async fn scan(
     State(state): State<WebState>,
     body: Result<Json<ScanRequest>, JsonRejection>,
@@ -214,12 +271,25 @@ async fn scan(
             "A scan is already running. Wait for it to finish, then try again.",
         );
     };
-    // A bounded channel applies backpressure without retaining a job/history.
+    // A bounded channel applies backpressure without retaining a scan job.
     let (sender, receiver) = mpsc::channel::<Result<String, Infallible>>(8);
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        let result =
-            scanner::scan_with_cache(&state.client, &repository, &state.cache, |progress| {
+        let result = scanner::scan_with_storage(
+            &state.client,
+            &repository,
+            &state.cache,
+            &state.recent,
+            |progress| {
+                if let ScanProgress::HistoryWarning(message) = &progress {
+                    send(
+                        &sender,
+                        Event::HistoryWarning {
+                            message: (*message).to_owned(),
+                        },
+                    );
+                    return;
+                }
                 let (current, total) = match &progress {
                     ScanProgress::Skill { current, total, .. } => (Some(*current), Some(*total)),
                     _ => (None, None),
@@ -238,7 +308,8 @@ async fn scan(
                         total,
                     },
                 );
-            });
+            },
+        );
         let event = match result {
             Ok(inventory) => Event::Complete {
                 inventory: inventory.into(),

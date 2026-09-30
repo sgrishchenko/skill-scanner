@@ -31,7 +31,8 @@ of complete public-repository analyses through the
 Enable caching by default for both commands, shared across invocations, browser
 tabs, and server restarts under the same user and cache configuration. Keep one
 complete entry per repository; a successful new analysis replaces the previous
-one. This is an optimization, not saved scan history or an offline browsing API.
+one. This is an optimization, separate from the
+[recent repository list](recent-repositories.md), and not an offline browsing API.
 
 | Platform | Default directory |
 | --- | --- |

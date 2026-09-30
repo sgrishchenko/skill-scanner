@@ -15,6 +15,7 @@ rules apply to both interfaces; interface documents link to those rules.
 | [Repository access](features/repository-access.md) | Accepted inputs, public GitHub access, credentials, timeouts, retries, and API limits |
 | [Skill discovery](features/skill-discovery.md) | Default-branch snapshot, recursive discovery, progress, ordering, and scan completeness |
 | [Analysis cache](features/analysis-cache.md) | Persistent shared analyses, commit validation, invalidation, storage, and cache failures |
+| [Recent repositories](features/recent-repositories.md) | Shared persistent recent list, completion times, selection, and removal |
 | [Skill metadata](features/skill-metadata.md) | YAML fields, file limits, warnings, and display fallbacks |
 | [Similarity grouping](features/similarity-grouping.md) | Metadata matching, connected groups, ordering, and statistics |
 | [CLI report](features/cli-report.md) | Commands, terminal inventory, stdout/stderr, and exit codes |
@@ -44,8 +45,10 @@ and other agent configuration formats such as `AGENTS.md` and Cursor rules are
 outside the supported scope. Skill installation/execution and quality or
 security ratings are also excluded.
 
-Hosted deployment, accounts, hosted authentication, a public bind option, saved
-scan history, and report export remain deferred. The internal web JSON
+Hosted deployment, accounts, hosted authentication, a public bind option, full
+saved scan reports, and report export remain deferred. The internal web JSON
 transport is not a general export API and does not add a CLI JSON mode.
 The [analysis cache](features/analysis-cache.md) speeds up repeated scans after
-online commit validation; it does not expose saved scan history.
+online commit validation. The
+[recent repository list](features/recent-repositories.md) separately remembers
+successful scans and supports removal.
