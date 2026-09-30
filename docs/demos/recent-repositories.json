@@ -1,0 +1,21 @@
+{
+  "tested_revision": "55d4ea301f45a8b591d0e667c4fc5a7a9289404f",
+  "environment": "mcr.microsoft.com/playwright:v1.63.0-noble (linux/amd64)",
+  "result": "passed",
+  "baseline_updates": "none",
+  "checkpoints": [
+    "01-empty-history",
+    "02-scanning",
+    "03-first-scan",
+    "04-newest-first",
+    "05-restart-persistence",
+    "06-select-saved-repository",
+    "07-repeat-scan-updates-entry",
+    "08-removal-keeps-current-results",
+    "09-removal-persists-after-restart"
+  ],
+  "sha256": {
+    "mp4": "a88c7cb8b368834929a5d3c8d5858347d36c135801ff2423533267010876d656",
+    "gif": "f28a23022de66ee33a35aefdad5f35bb24fe61410f383e005b107770fcb07ba5"
+  }
+}
