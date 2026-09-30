@@ -50,6 +50,18 @@ code-signed or notarized.
 
 ## Output
 
+While scanning, the CLI prints progress to **stderr** before each operation,
+including the current directory during large-repository discovery and each
+skill's path with a counter:
+
+```text
+Resolving repository: example/agent-tools
+Resolving default branch: main
+Discovering SKILL.md files: /
+Scanning skill [1/2]: skills/code-review/SKILL.md
+Scanning skill [2/2]: skills/release-notes/SKILL.md
+```
+
 An illustrative scan looks like this (the commit is shortened here only):
 
 ```text
@@ -75,11 +87,14 @@ containing directory, or the repository name for a root-level file. Descriptions
 are empty when unavailable. Discovery does not certify a skill's validity,
 compatibility, or safety.
 
-The report uses plain text and works when redirected:
+The report uses plain text and works when redirected. Progress and warnings
+remain visible in the console when only stdout is redirected:
 
 ```sh
-skill-scanner scan OWNER/REPO > skills.txt 2> warnings.txt
+skill-scanner scan OWNER/REPO > skills.txt
 ```
+
+Add `2> scan.log` to capture progress, warnings, and errors in a separate file.
 
 A completed scan with no matches prints `Skills found: 0` and
 `No SKILL.md files found.` Empty repositories additionally report that there is

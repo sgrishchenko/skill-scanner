@@ -236,8 +236,24 @@ fn scans_root_hidden_nested_and_duplicate_skills_in_stable_order() {
         blob(A, VALID),
     ]);
     let server = Server::start(replies);
-    let inventory = scanner::scan(&server.client(), &"example/skills".parse().unwrap()).unwrap();
+    let mut progress_output = Vec::new();
+    let mut requests_at_progress = Vec::new();
+    let inventory = scanner::scan_with_progress(
+        &server.client(),
+        &"example/skills".parse().unwrap(),
+        |progress| {
+            requests_at_progress.push(server.requests.lock().unwrap().len());
+            report::write_progress(&mut progress_output, progress).unwrap();
+        },
+    )
+    .unwrap();
     let requests = server.finish();
+    // Each status must be visible before its HTTP request starts, including
+    // repository resolution and discovery before any skill paths are known.
+    assert_eq!(requests_at_progress, (0..8).collect::<Vec<_>>());
+    let progress_output = String::from_utf8(progress_output).unwrap();
+    assert!(progress_output.contains("Scanning skill [1/5]: .hidden/SKILL.md\n"));
+    assert!(progress_output.ends_with("Scanning skill [5/5]: z/review/SKILL.md\n"));
     assert_eq!(inventory.commit.as_deref(), Some(COMMIT));
     assert_eq!(
         inventory
@@ -271,9 +287,9 @@ fn scans_root_hidden_nested_and_duplicate_skills_in_stable_order() {
     let mut warnings = Vec::new();
     report::write_report(&mut output, &inventory).unwrap();
     report::write_warnings(&mut warnings, &inventory).unwrap();
-    assert!(String::from_utf8(output)
-        .unwrap()
-        .contains("Skills found: 5\n"));
+    let output = String::from_utf8(output).unwrap();
+    assert!(output.contains("Skills found: 5\n"));
+    assert!(!output.contains("Scanning"));
     assert!(String::from_utf8(warnings)
         .unwrap()
         .contains("warning: SKILL.md: name:"));
@@ -309,7 +325,29 @@ fn truncated_recursive_tree_walks_all_directories_and_reuses_shared_trees() {
         blob(B, VALID),
     ]);
     let server = Server::start(replies);
-    let inventory = scanner::scan(&server.client(), &"example/skills".parse().unwrap()).unwrap();
+    let mut directories = Vec::new();
+    let inventory = scanner::scan_with_progress(
+        &server.client(),
+        &"example/skills".parse().unwrap(),
+        |progress| {
+            if let scanner::ScanProgress::Directory(path) = progress {
+                directories.push((path.to_owned(), server.requests.lock().unwrap().len()));
+            }
+        },
+    )
+    .unwrap();
+    // Report directories before fetching them, even when shared trees are cached.
+    assert_eq!(
+        directories,
+        [
+            ("/", 3),
+            ("b", 4),
+            ("b/.nested", 5),
+            ("a", 6),
+            ("a/.nested", 6)
+        ]
+        .map(|(path, requests)| (path.to_owned(), requests))
+    );
     assert_eq!(
         inventory
             .skills

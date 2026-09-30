@@ -37,8 +37,11 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let result =
-        GitHubClient::new(token.as_deref()).and_then(|client| scanner::scan(&client, &repository));
+    let result = GitHubClient::new(token.as_deref()).and_then(|client| {
+        scanner::scan_with_progress(&client, &repository, |progress| {
+            let _ = report::write_progress(&mut io::stderr().lock(), progress);
+        })
+    });
     match result {
         Ok(inventory) => {
             let stderr = io::stderr();

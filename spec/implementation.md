@@ -37,8 +37,12 @@ before implementation.
   empty, malformed, or wrongly typed fields produce path/field warnings. Other
   fields are ignored. Directory/repository fallback names preserve discovery.
 - **Terminal:** render a complete inventory to stdout only after the scan
-  succeeds. Warnings and errors go to stderr. Escape control characters from
-  repository content, including terminal escape sequences. GitHub links are
+  succeeds. Progress, warnings, and errors go to stderr. Flush plain-text progress
+  before resolving the repository/branch, discovering files, walking each
+  directory in a truncated-tree fallback, and scanning each skill. Skill progress
+  includes the current path and a one-based counter out of the discovered total.
+  Escape control characters from repository content, including terminal escape
+  sequences. GitHub links are
   URL encoded and pinned to the scanned commit. Redirected output works without
   colors, a pager, or a TTY. Broken stdout pipes exit successfully.
 - **Input:** accept `owner/repo` or an HTTPS `github.com` repository URL, optionally

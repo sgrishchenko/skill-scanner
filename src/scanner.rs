@@ -23,7 +23,30 @@ pub struct Skill {
     pub warnings: Vec<MetadataWarning>,
 }
 
+#[derive(Debug)]
+pub enum ScanProgress<'a> {
+    Repository(&'a Repository),
+    DefaultBranch(&'a str),
+    DiscoveringSkills,
+    Directory(&'a str),
+    Skill {
+        path: &'a str,
+        current: usize,
+        total: usize,
+    },
+}
+
 pub fn scan(client: &GitHubClient, repository: &Repository) -> Result<Inventory, ScanError> {
+    scan_with_progress(client, repository, |_| {})
+}
+
+/// Report the current operation before starting potentially slow network work.
+pub fn scan_with_progress(
+    client: &GitHubClient,
+    repository: &Repository,
+    mut progress: impl FnMut(ScanProgress<'_>),
+) -> Result<Inventory, ScanError> {
+    progress(ScanProgress::Repository(repository));
     let info = client.repository(repository)?;
     if info.private {
         return Err(ScanError(
@@ -40,11 +63,18 @@ pub fn scan(client: &GitHubClient, repository: &Repository) -> Result<Inventory,
         commit: None,
         skills: Vec::new(),
     };
+    progress(ScanProgress::DefaultBranch(&info.default_branch));
     let Some(commit) = client.default_commit(repository, &info.default_branch)? else {
         return Ok(inventory);
     };
-    let candidates = discover(client, repository, &commit.commit.tree.sha)?;
-    for entry in candidates {
+    let candidates = discover(client, repository, &commit.commit.tree.sha, &mut progress)?;
+    let total = candidates.len();
+    for (index, entry) in candidates.into_iter().enumerate() {
+        progress(ScanProgress::Skill {
+            path: &entry.path,
+            current: index + 1,
+            total,
+        });
         let fallback = entry
             .path
             .rsplit_once('/')
@@ -86,7 +116,9 @@ fn discover(
     client: &GitHubClient,
     repository: &Repository,
     root_sha: &str,
+    progress: &mut impl FnMut(ScanProgress<'_>),
 ) -> Result<Vec<TreeEntry>, ScanError> {
+    progress(ScanProgress::DiscoveringSkills);
     let recursive = client.tree(repository, root_sha, true)?;
     let mut candidates = Vec::new();
     if !recursive.truncated {
@@ -104,6 +136,11 @@ fn discover(
                 ));
             }
             ancestors.push(sha.clone());
+            progress(ScanProgress::Directory(if prefix.is_empty() {
+                "/"
+            } else {
+                &prefix
+            }));
             if !cache.contains_key(&sha) {
                 let tree = client.tree(repository, &sha, false)?;
                 if tree.truncated {

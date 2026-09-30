@@ -11,7 +11,7 @@ pub struct Cli {
 pub enum Command {
     /// List SKILL.md files on the repository's default branch
     #[command(
-        after_help = "An optional GITHUB_TOKEN raises GitHub's public API limits.\nRepository content is read without running any scripts or skill instructions."
+        after_help = "Scan progress and warnings are printed to stderr.\nAn optional GITHUB_TOKEN raises GitHub's public API limits.\nRepository content is read without running any scripts or skill instructions."
     )]
     Scan {
         /// OWNER/REPO or https://github.com/OWNER/REPO

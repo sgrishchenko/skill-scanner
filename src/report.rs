@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::scanner::Inventory;
+use crate::scanner::{Inventory, ScanProgress};
 
 /// Prevent repository-controlled text from issuing terminal commands or changing
 /// the report's line structure, even when stdout is redirected.
@@ -16,6 +16,39 @@ pub fn terminal_text(text: &str) -> String {
         }
     }
     safe
+}
+
+pub fn write_progress(mut output: impl Write, progress: ScanProgress<'_>) -> io::Result<()> {
+    match progress {
+        ScanProgress::Repository(repository) => {
+            writeln!(output, "Resolving repository: {repository}")?;
+        }
+        ScanProgress::DefaultBranch(branch) => {
+            writeln!(
+                output,
+                "Resolving default branch: {}",
+                terminal_text(branch)
+            )?;
+        }
+        ScanProgress::DiscoveringSkills => {
+            writeln!(output, "Discovering SKILL.md files: /")?;
+        }
+        ScanProgress::Directory(path) => {
+            writeln!(output, "Scanning directory: {}", terminal_text(path))?;
+        }
+        ScanProgress::Skill {
+            path,
+            current,
+            total,
+        } => {
+            writeln!(
+                output,
+                "Scanning skill [{current}/{total}]: {}",
+                terminal_text(path)
+            )?;
+        }
+    }
+    output.flush()
 }
 
 pub fn write_report(mut output: impl Write, inventory: &Inventory) -> io::Result<()> {
@@ -91,8 +124,20 @@ mod tests {
         };
         let mut output = Vec::new();
         let mut warnings = Vec::new();
+        let mut progress = Vec::new();
         write_report(&mut output, &inventory).unwrap();
         write_warnings(&mut warnings, &inventory).unwrap();
+        write_progress(&mut progress, ScanProgress::DefaultBranch("main\x1b[2J")).unwrap();
+        write_progress(&mut progress, ScanProgress::Directory("skills/evil\n")).unwrap();
+        write_progress(
+            &mut progress,
+            ScanProgress::Skill {
+                path: &inventory.skills[0].path,
+                current: 1,
+                total: 1,
+            },
+        )
+        .unwrap();
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("name\\u{1b}[2J"));
         assert!(output.contains("Hello\\u{202e}world"));
@@ -101,6 +146,10 @@ mod tests {
         assert_eq!(
             String::from_utf8(warnings).unwrap(),
             "warning: skills/evil\\n/SKILL.md: name: field is missing\n"
+        );
+        assert_eq!(
+            String::from_utf8(progress).unwrap(),
+            "Resolving default branch: main\\u{1b}[2J\nScanning directory: skills/evil\\n\nScanning skill [1/1]: skills/evil\\n/SKILL.md\n"
         );
     }
 }
