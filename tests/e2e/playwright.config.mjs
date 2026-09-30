@@ -26,6 +26,7 @@ export default defineConfig({
   },
   use: {
     browserName: 'chromium',
+    launchOptions: { args: ['--disable-gpu', '--disable-partial-raster', '--force-color-profile=srgb'] },
     viewport: { width: 1280, height: 1000 },
     deviceScaleFactor: 1,
     locale: 'en-US',
