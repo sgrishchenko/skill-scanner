@@ -73,6 +73,10 @@ do not enable offline result browsing or change the one-scan-per-server rule.
 ## Acceptance checks
 
 Use temporary directories and mocked GitHub or browser scan responses only.
+The [reproducible browser demo test](../../tests/e2e/README.md) covers the
+successful scan, persistence, selection, repeat scan, and removal sequence with
+named screenshot assertions; the remaining scenarios also need their existing
+Rust tests or separate browser acceptance checks.
 
 - A new storage instance, CLI process, or web server sees successful prior
   scans, including empty repositories and cache hits. New scans move entries

@@ -271,6 +271,9 @@ compatible with Rust 1.84 (0.8.3 incorrectly uses a newer standard-library API).
 Modules separate argument parsing, repository input, GitHub transport, discovery,
 analysis caching, recent repositories, metadata, terminal rendering, and the web
 server. Browser assets live in `web/`.
+The optional [browser E2E suite](tests/e2e/README.md) uses pinned Playwright
+tooling and screenshot baselines to reproduce the recent repositories demo.
+It runs in CI and uses mocked scan responses with isolated local storage.
 See the [feature specification index](spec/README.md) for behavior and acceptance
 checks, and [implementation decisions](spec/implementation.md) for architecture
 and verification.

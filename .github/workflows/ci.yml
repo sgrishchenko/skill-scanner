@@ -6,6 +6,24 @@ permissions:
   contents: read
 
 jobs:
+  browser-e2e:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.63.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --locked
+      - run: npm ci --prefix tests/e2e
+      - run: npm test --prefix tests/e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-e2e
+          path: |
+            tests/e2e/test-results/
+            tests/e2e/playwright-report/
+          retention-days: 14
+
   quality:
     runs-on: ubuntu-24.04
     steps:

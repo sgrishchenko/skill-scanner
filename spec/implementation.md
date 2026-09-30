@@ -108,3 +108,10 @@ real credentials.
 | Web API and scan lifecycle | In-process HTTP tests exercise the real scanner against mocked GitHub responses, including streaming, warnings, errors, empty results, concurrency, disconnects, input/body limits, and Host/Origin checks |
 | Embedded server | CLI subprocess tests start the site from another working directory and check port errors |
 | Browser behavior | Acceptance checks use mocked scan responses for repeatability without a GitHub token; PR video demos record passing E2E tests with screenshot assertions at key steps, following the [video demo requirements](../CONTRIBUTING.md#visual-feature-demonstrations) |
+
+The [browser E2E suite](../tests/e2e/README.md) runs the rebuilt executable in a
+pinned Playwright Linux container, with fixed scan fixtures and isolated history
+and cache directories. Recent-list/removal requests and CLI history reads use
+the actual application. CI checks reviewed screenshot baselines without updates
+and retains reports, videos, and failure artifacts. Demo exports use the video
+attachment from that same passing test execution.
