@@ -5,7 +5,7 @@ use std::{
     ffi::OsString,
     fs::{self, File},
     io::{self, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -116,7 +116,7 @@ impl RecentRepositories {
             {
                 continue;
             }
-            let file = match File::open(&path) {
+            let file = match open_entry(&path) {
                 Ok(file) => file,
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                 Err(error) => return Err(error),
@@ -176,6 +176,39 @@ impl RecentRepositories {
                 }
             }
             result => result,
+        }
+    }
+}
+
+fn open_entry(path: &Path) -> io::Result<File> {
+    #[cfg(windows)]
+    {
+        retry_windows_entry_open(|| File::open(path), std::thread::sleep)
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(path)
+    }
+}
+
+#[cfg(any(windows, test))]
+fn retry_windows_entry_open<T>(
+    mut open: impl FnMut() -> io::Result<T>,
+    mut wait: impl FnMut(std::time::Duration),
+) -> io::Result<T> {
+    // Replacing an entry can briefly leave the destination pending deletion
+    // on Windows. CreateFile may report ACCESS_DENIED, SHARING_VIOLATION, or
+    // DELETE_PENDING during that interval. Persistent errors still reach callers.
+    let mut delays = [5, 10, 20].into_iter();
+    loop {
+        match open() {
+            Err(error) if matches!(error.raw_os_error(), Some(5 | 32 | 303)) => {
+                let Some(delay) = delays.next() else {
+                    return Err(error);
+                };
+                wait(std::time::Duration::from_millis(delay));
+            }
+            result => return result,
         }
     }
 }
