@@ -107,4 +107,4 @@ real credentials.
 | CLI | Subprocess tests verify exit codes and stdout/stderr separation |
 | Web API and scan lifecycle | In-process HTTP tests exercise the real scanner against mocked GitHub responses, including streaming, warnings, errors, empty results, concurrency, disconnects, input/body limits, and Host/Origin checks |
 | Embedded server | CLI subprocess tests start the site from another working directory and check port errors |
-| Browser behavior | Acceptance checks use mocked scan responses for repeatability without a GitHub token |
+| Browser behavior | Acceptance checks use mocked scan responses for repeatability without a GitHub token; PR video demos record passing E2E tests with screenshot assertions at key steps, following the [video demo requirements](../CONTRIBUTING.md#visual-feature-demonstrations) |

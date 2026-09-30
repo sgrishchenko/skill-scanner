@@ -39,6 +39,11 @@ consistency with the existing specs; Rust checks are unnecessary.
 
 - Follow the [contribution guide](CONTRIBUTING.md) when preparing or reviewing
   GitHub pull requests, and use the [PR template](.github/pull_request_template.md).
+- Use the repository's [PR skill](.agents/skills/create-feature-pr/SKILL.md) for
+  preparing and opening PRs.
+- Every PR video demo must come from a passing E2E test with screenshot
+  assertions at key steps; follow the
+  [video demo requirements](CONTRIBUTING.md#visual-feature-demonstrations).
 
 ## Keep documentation current
 
