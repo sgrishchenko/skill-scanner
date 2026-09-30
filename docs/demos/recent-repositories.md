@@ -1,6 +1,8 @@
 # Recent repositories demonstration
 
-[Watch the demonstration](recent-repositories.mp4).
+![Recent repositories demonstration](recent-repositories.gif)
+
+[Watch the MP4 version](recent-repositories.mp4).
 
 The recording shows the embedded web interface from the rebuilt feature
 implementation (`e42fdb8`). It uses local fixtures and mocked successful scan
