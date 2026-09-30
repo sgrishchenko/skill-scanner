@@ -3,6 +3,7 @@
 const $ = (id) => document.getElementById(id);
 let inventory = null;
 let busy = false;
+let groupedView = true;
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -44,9 +45,9 @@ function showError(message) {
   $("error").focus();
 }
 
-function skillCard(skill) {
+function skillCard(skill, heading = "h3") {
   const card = node("article", "skill-card");
-  card.append(node("h3", "", skill.name));
+  card.append(node(heading, "", skill.name));
   card.append(node("p", "skill-description", skill.description || "No description available."));
   card.append(node("code", "skill-path", skill.path));
   const link = externalLink("View on GitHub ↗", skill.link, "skill-link");
@@ -66,21 +67,75 @@ function skillCard(skill) {
   return card;
 }
 
+function percentage(count) {
+  const total = inventory.aggregation.statistics.total_skills;
+  return `${total ? (100 * count / total).toFixed(1) : "0.0"}%`;
+}
+
+function groupCard(group, visibleIndices, filtered) {
+  if (group.skill_indices.length === 1) return skillCard(inventory.skills[visibleIndices[0]]);
+  const first = inventory.skills[group.skill_indices[0]];
+  const card = node("article", "skill-group");
+  const heading = node("div", "group-heading");
+  heading.append(node("h3", "", first.name));
+  heading.append(node("span", "group-size", `${group.skill_indices.length} skills`));
+  card.append(heading);
+  card.append(node("p", "group-statistics", `${percentage(group.skill_indices.length)} of all skills · ${group.skills_with_warnings} with warnings`));
+  const details = node("details", "group-details");
+  const count = visibleIndices.length;
+  const label = count === group.skill_indices.length
+    ? `View ${count} skills`
+    : `Showing ${count} of ${group.skill_indices.length} skills matching filters`;
+  details.append(node("summary", "", label));
+  details.open = filtered;
+  const members = node("div", "group-members");
+  visibleIndices.forEach((index) => members.append(skillCard(inventory.skills[index], "h4")));
+  details.append(members);
+  card.append(details);
+  return card;
+}
+
+function setView(grouped) {
+  groupedView = grouped;
+  $("grouped-view").setAttribute("aria-pressed", String(grouped));
+  $("all-view").setAttribute("aria-pressed", String(!grouped));
+  renderSkills();
+}
+
 function renderSkills() {
   if (!inventory) return;
   const query = $("search").value.trim().toLocaleLowerCase();
   const warningsOnly = $("warnings-only").checked;
-  const skills = inventory.skills.filter((skill) =>
-    (!warningsOnly || skill.warnings.length > 0) &&
-    [skill.name, skill.description, skill.path].some((text) => text.toLocaleLowerCase().includes(query))
-  );
+  const similarOnly = $("similar-only").checked;
+  const groups = inventory.aggregation.groups;
+  const visible = new Set();
+  const matchingGroups = [];
+  for (const group of groups) {
+    if (similarOnly && group.skill_indices.length < 2) continue;
+    const indices = group.skill_indices.filter((index) => {
+      const skill = inventory.skills[index];
+      return (!warningsOnly || skill.warnings.length > 0) &&
+        [skill.name, skill.description, skill.path].some((text) => text.toLocaleLowerCase().includes(query));
+    });
+    if (indices.length) {
+      matchingGroups.push({ group, indices });
+      indices.forEach((index) => visible.add(index));
+    }
+  }
   const cards = document.createDocumentFragment();
-  skills.forEach((skill) => cards.append(skillCard(skill)));
+  if (groupedView) {
+    matchingGroups.forEach(({ group, indices }) => cards.append(groupCard(group, indices, Boolean(query || warningsOnly))));
+  } else {
+    inventory.skills.forEach((skill, index) => { if (visible.has(index)) cards.append(skillCard(skill)); });
+  }
+  $("skill-list").classList.toggle("grouped", groupedView);
   $("skill-list").replaceChildren(cards);
-  $("result-count").textContent = `Showing ${skills.length} of ${inventory.skills.length} skills · sorted by path`;
-  $("no-results").hidden = skills.length > 0;
+  $("result-count").textContent = `Showing ${visible.size} of ${inventory.skills.length} skills` + (groupedView
+    ? ` in ${matchingGroups.length} of ${groups.length} groups (including standalone skills) · largest first`
+    : " · sorted by path");
+  $("no-results").hidden = visible.size > 0;
   $("clear-filters").hidden = inventory.skills.length === 0;
-  if (!skills.length) {
+  if (!visible.size) {
     if (inventory.skills.length) {
       $("empty-title").textContent = "No skills match your filters";
       $("empty-description").textContent = "Try another search, or clear the filters to see all discovered skills.";
@@ -97,7 +152,13 @@ function renderInventory(result) {
   inventory = result;
   $("result-repository").textContent = result.repository;
   $("skill-count").textContent = result.skills.length;
-  $("warning-count").textContent = result.skills.filter((skill) => skill.warnings.length).length;
+  const stats = result.aggregation.statistics;
+  $("warning-count").textContent = stats.skills_with_warnings;
+  $("similar-group-count").textContent = stats.similar_groups;
+  $("grouped-skill-count").textContent = stats.grouped_skills;
+  $("grouped-skill-share").textContent = `${percentage(stats.grouped_skills)} of all skills`;
+  $("standalone-count").textContent = stats.standalone_skills;
+  $("largest-group-count").textContent = stats.largest_group;
   $("result-commit").replaceChildren();
   if (result.commit) {
     const link = externalLink(`Commit ${result.commit.slice(0, 7)} ↗`, `https://github.com/${result.repository}/commit/${result.commit}`);
@@ -107,7 +168,7 @@ function renderInventory(result) {
   } else {
     $("result-commit").textContent = "No commit to scan";
   }
-  $("filters").hidden = result.skills.length === 0;
+  $("result-controls").hidden = result.skills.length === 0;
   $("results-status").textContent = "Scan complete";
   renderSkills();
   $("initial-state").hidden = true;
@@ -172,6 +233,8 @@ $("scan-form").addEventListener("submit", async (event) => {
   $("initial-state").hidden = true;
   $("search").value = "";
   $("warnings-only").checked = false;
+  $("similar-only").checked = false;
+  setView(true);
   $("results-status").textContent = "Scanning repository…";
   updateProgress({ message: "Connecting to GitHub…" });
   setBusy(true);
@@ -207,9 +270,13 @@ document.querySelectorAll("[data-repository]").forEach((button) => {
 });
 $("search").addEventListener("input", renderSkills);
 $("warnings-only").addEventListener("change", renderSkills);
+$("similar-only").addEventListener("change", renderSkills);
+$("grouped-view").addEventListener("click", () => setView(true));
+$("all-view").addEventListener("click", () => setView(false));
 $("clear-filters").addEventListener("click", () => {
   $("search").value = "";
   $("warnings-only").checked = false;
+  $("similar-only").checked = false;
   renderSkills();
   $("search").focus();
 });

@@ -39,15 +39,29 @@ There is no public bind option or authentication system for hosted use.
    files already read.
 3. On completion, display the repository, full commit in the commit link's
    accessible label/title (shortened visually), total skills, and the number of
-   skills with metadata warnings. Results remain sorted by repository path.
+   skills with metadata warnings. Show similar-group counts, grouped skills and
+   their percentage of all skills, standalone skills, and largest similar-group
+   size (zero when there are no similar groups). These statistics include the
+   entire scan and remain visible for successful empty scans with zero values.
 4. Each card shows the skill's name, description, path, and a commit-pinned GitHub
    source link. Missing descriptions say “No description available.” Expand
    metadata warnings to read field-specific messages. Names use the scanner's
-   directory/repository fallback. Duplicate names remain separate cards.
+   directory/repository fallback. Each source file remains individually accessible.
+   Default to **Grouped skills**, with similar groups largest first and ties
+   broken by their first member path. Show size, percentage of all skills, and
+   skills with warnings for each group. Expand a group to inspect its member
+   cards sorted by path. Standalone skills appear as individual cards. **All
+   skills** displays every card sorted by path. Explain the shared
+   [metadata matching rules](cli.md#discovery-and-reporting-rules).
 5. Search names, descriptions, and paths by case-insensitive substring, and
-   optionally show only skills with warnings. Filters combine with AND and run
-   locally. Show visible/total counts and a clear-filters action when no cards
-   match. Summary totals always describe the complete scan.
+   optionally show only similar skills or skills with warnings. Filters combine
+   with AND and run locally in both views. Apply filters to individual members;
+   open matching groups automatically when searching or filtering by warnings,
+   and state how many members remain visible. A group remains similar even when
+   filters leave only one visible member. Show visible/total skill and group
+   counts and a clear-filters action when no cards match. Summary and group
+   statistics always describe the complete scan. Reset filters and the view on
+   each new scan.
 6. Start another scan using the same form. The app retains no scan history.
 
 ## States and failure behavior
@@ -108,10 +122,19 @@ JSON object. Progress arrives before the corresponding GitHub operation:
 `current` and `total` are set only for individual skills. A successful scan ends
 with `{"type":"complete","inventory":{...}}`. The inventory has `repository`
 (normalized string), `commit` (full SHA or null for an empty repository), and
-`skills`. Each skill contains `name`, `description`, `path`, `link`, and `warnings`;
+`skills`, and `aggregation`. Each skill contains `name`, `description`, `path`, `link`, and `warnings`;
 each warning has `field` and `message`. A failed scan ends with
 `{"type":"error","message":"..."}` and no inventory. JSON encoding handles
 embedded newlines; clients must handle event boundaries split across chunks.
+
+`aggregation.statistics` contains integer counts: `total_skills`,
+`similar_groups`, `grouped_skills`, `standalone_skills`, `largest_group`, and
+`skills_with_warnings`. `aggregation.groups` contains every group, including
+singletons, ordered largest first then by first member path. Each group has
+`skill_indices` (zero-based indices into `skills`, sorted by path) and
+`skills_with_warnings`. Each skill index occurs in exactly one group. Empty
+inventories have no groups and all-zero statistics. Percentages use the full
+scan's skill count as the denominator, with zero for an empty scan.
 
 ## Local access and accessibility
 
@@ -136,6 +159,10 @@ without external images, fonts, analytics, or frontend network dependencies.
   warnings; repository-controlled markup stays inert text.
 - Progress reaches the page before completion; incomplete streams show errors.
 - Search and warnings filters combine correctly and can be cleared.
+- Grouped/all views retain every source. Similarity statistics and group counts
+  agree with the CLI, and remain stable when filters reduce visible members.
+- Similar-only, warning, and search filters combine in both views; missing
+  metadata does not produce false similarity groups.
 - Zero results, empty repositories, invalid input, busy responses, and upstream
   failures have distinct behavior with no stale or partial inventory.
 - Multiple tabs cannot start concurrent scans. Capacity is released after a

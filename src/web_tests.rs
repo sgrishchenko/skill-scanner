@@ -214,6 +214,15 @@ fn streams_progress_then_a_complete_inventory_with_warnings_and_pinned_links() {
             let inventory = &last["inventory"];
             assert_eq!(inventory["repository"], "example/skills");
             assert_eq!(inventory["commit"], COMMIT);
+            assert_eq!(inventory["aggregation"]["statistics"]["total_skills"], 2);
+            assert_eq!(
+                inventory["aggregation"]["statistics"]["standalone_skills"],
+                2
+            );
+            assert_eq!(
+                inventory["aggregation"]["statistics"]["skills_with_warnings"],
+                1
+            );
             assert_eq!(inventory["skills"][0]["path"], ".hidden/SKILL.md");
             assert_eq!(
                 inventory["skills"][0]["name"],
@@ -226,6 +235,56 @@ fn streams_progress_then_a_complete_inventory_with_warnings_and_pinned_links() {
             assert_eq!(
                 inventory["skills"][1]["link"],
                 format!("https://github.com/example/skills/blob/{COMMIT}/b/SKILL.md")
+            );
+        })
+    });
+}
+
+#[test]
+fn includes_aggregated_groups_and_statistics_in_the_completed_scan() {
+    let mut replies = snapshot();
+    replies.extend([
+        tree(
+            ROOT,
+            true,
+            false,
+            vec![
+                skill("c/SKILL.md", C),
+                skill("a/SKILL.md", A),
+                skill("b/SKILL.md", B),
+            ],
+        ),
+        blob(
+            A,
+            b"---\nname: Code Review\ndescription: Review changes\n---\n",
+        ),
+        blob(B, b"---\nname: code-review\n---\n"),
+        blob(
+            C,
+            b"---\nname: release-notes\ndescription: Draft notes\n---\n",
+        ),
+    ]);
+    with_web(replies, |app, runtime| {
+        runtime.block_on(async {
+            let events = events(app.oneshot(scan_request()).await.unwrap()).await;
+            let inventory = &events.last().unwrap()["inventory"];
+            assert_eq!(inventory["skills"].as_array().unwrap().len(), 3);
+            assert_eq!(
+                inventory["aggregation"],
+                json!({
+                    "statistics": {
+                        "total_skills": 3,
+                        "similar_groups": 1,
+                        "grouped_skills": 2,
+                        "standalone_skills": 1,
+                        "largest_group": 2,
+                        "skills_with_warnings": 1
+                    },
+                    "groups": [
+                        {"skill_indices": [0, 1], "skills_with_warnings": 1},
+                        {"skill_indices": [2], "skills_with_warnings": 0}
+                    ]
+                })
             );
         })
     });
@@ -288,6 +347,14 @@ fn distinguishes_no_skills_from_an_empty_repository_in_web_results() {
                 assert_eq!(last["type"], "complete");
                 assert_eq!(last["inventory"]["skills"], json!([]));
                 assert_eq!(last["inventory"]["commit"].is_null(), empty);
+                assert_eq!(last["inventory"]["aggregation"]["groups"], json!([]));
+                assert_eq!(
+                    last["inventory"]["aggregation"]["statistics"],
+                    json!({
+                        "total_skills": 0, "similar_groups": 0, "grouped_skills": 0,
+                        "standalone_skills": 0, "largest_group": 0, "skills_with_warnings": 0
+                    })
+                );
             })
         });
     }

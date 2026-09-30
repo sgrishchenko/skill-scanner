@@ -66,7 +66,16 @@ executable, so no Node.js installation or separate frontend build is needed.
 
 Enter a public GitHub repository, follow live scan progress, and browse skill
 names, descriptions, paths, metadata warnings, and links to the scanned commit.
-Search the results or filter to skills with warnings. Empty repositories, zero
+Similar skills are grouped by matching names or descriptions, ignoring case,
+spacing, and punctuation. Expand a group to inspect every member, or switch to
+**All skills** for the full list sorted by path. Statistics show similar groups,
+skills in those groups and their percentage of the scan, standalone skills, the
+largest group, and skills with warnings. Each group shows its size, percentage,
+and warning count. Groups are ordered largest first, then by their first path.
+
+Search the results, filter to similar skills, or filter to skills with warnings.
+Filters combine and apply to individual skills; scan and group statistics always
+describe the complete scan. Empty repositories, zero
 matches, and failures are shown separately; partial inventories are never shown.
 
 The browser uses the same scanner and GitHub limits as the CLI. To raise the
@@ -95,6 +104,11 @@ An illustrative scan looks like this (the commit is shortened here only):
 Repository: example/agent-tools
 Commit: 0123456789abcdef...
 Skills found: 2
+Similar groups: 0
+Skills in similar groups: 0 (0.0%)
+Standalone skills: 2
+Largest similar group: 0
+Skills with warnings: 0
 
 code-review
   Description: Review changes for correctness and maintainability.
@@ -107,7 +121,20 @@ release-notes
   Link: https://github.com/example/agent-tools/blob/0123456789abcdef.../skills/release-notes/SKILL.md
 ```
 
-Results are sorted by path; duplicate names remain separate. Missing or malformed
+The CLI includes the same statistics and a summary of each similar group with
+its member paths. The full inventory stays sorted by path; each file keeps its
+own description and source link.
+
+Similarity compares valid metadata fields after lowercasing and replacing runs
+of punctuation or whitespace with a space. Names match names; descriptions match
+descriptions. Matches can connect through other members, so each skill belongs
+to exactly one group. Missing metadata, fallback names, and fields containing
+only punctuation do not create matches. A similar group contains at least two
+skills; all other skills are standalone. The largest similar group is zero when
+there are no matches. Similarity reflects metadata, not identical file contents
+or semantic equivalence.
+
+Missing or malformed
 metadata produces a warning identifying the path and field on **stderr**, while
 the discovered file remains in the report on **stdout**. Names fall back to the
 containing directory, or the repository name for a root-level file. Descriptions
