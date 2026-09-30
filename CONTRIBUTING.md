@@ -59,9 +59,32 @@ successfully.
 Every feature PR that changes visible appearance or user interactions must
 include a recorded video demonstration of the feature in the running
 application. Show the relevant user actions and visible result from the final
-implementation. For browser features, rebuild the executable before recording
-to include the updated assets. Use local fixtures and mocked responses without
-live GitHub access or real credentials.
+implementation.
+
+Every video demo included in a PR, including an animated GIF version, must be
+recorded from a passing, reproducible end-to-end (E2E) test. The test must drive
+the actual application through the demonstrated user flow and assert its
+behavior. A manual recording or a script that only captures screenshots does
+not meet this requirement. This also applies to optional demos in nonvisual PRs.
+
+- Keep the E2E test, fixtures, and screenshot baselines in the repository. Use
+  local fixtures and mocked responses without live GitHub access or real
+  credentials, and isolate persistent test storage. For browser demos, rebuild
+  the executable first so it embeds the current assets.
+- Add named screenshot assertions at the key steps: the starting state,
+  meaningful intermediate states after user actions, and the final outcome.
+  Include error or recovery states when they are part of the demonstrated
+  flow. Assert the expected behavior before comparing each screenshot against
+  a reviewed baseline; visual mismatches must fail the test. Saving screenshots
+  or inspecting video frames alone is not a screenshot assertion.
+- Keep visual checks deterministic with fixed fixtures, viewport, and browser
+  settings. Wait for the expected UI state and stabilize changing timestamps
+  or animations without masking the behavior under test. Review new or changed
+  baselines for correctness, then rerun with baseline updates disabled.
+- Record the same test execution that passes the behavioral and screenshot
+  assertions. Do not substitute a separate demonstration script or publish a
+  failed run as validation. Captions, trimming, and format conversion may
+  improve readability, but must preserve the tested sequence and outcome.
 
 Embed the recorded demo directly in the PR description's Video demonstration
 section so reviewers can watch it without downloading it or leaving the PR.
@@ -70,13 +93,18 @@ upload is unavailable, embed an animated preview of the same recording and link
 the full video. A download link, repository file link, or local path alone is
 insufficient. Static screenshots may supplement the demo but do not replace it.
 
-Verify the saved PR description renders a playable video or animated preview
-and that the media is accessible to reviewers. Re-record the demonstration if
-later changes make it inaccurate.
+Alongside the recording, link the E2E test and screenshot baselines or report.
+Record the exact reproduction command, tested revision, key screenshot
+checkpoints, and pass/fail result. Make the artifacts accessible to reviewers.
 
-If recording, sharing, or inline playback is blocked, explain the blocker in the
-PR and keep it in draft until the inline demo is available. For features without
-visual or interaction changes, mark the section as not applicable.
+Verify the saved PR description renders a playable video or animated preview
+and that the media is accessible to reviewers. After a relevant code, fixture,
+or baseline change, rerun the test and replace the recording.
+
+If test validation, recording, sharing, or inline playback is blocked, explain
+the blocker in the PR and keep it in draft until the tested inline demo is
+available. For features without visual or interaction changes and no optional
+demo, mark the section as not applicable.
 
 ## Review and merge
 
