@@ -14,9 +14,12 @@ for architecture and [the README](README.md) for setup and usage.
   the resulting behavior, and how you verified it. Link relevant specs and an
   issue when one exists; an issue is not required.
 - Describe material compatibility concerns, limitations, or follow-up work
-  when applicable. Include screenshots for visual changes when they help review.
+  when applicable.
+- For features that change visible appearance or user interactions, include a
+  recorded [video demonstration](#visual-feature-demonstrations) in the PR.
 - Keep the title and description aligned with the final implementation as the
-  scope changes. Use a draft PR while work or required validation is incomplete.
+  scope changes. Use a draft PR while work, required validation, or a required
+  video demonstration is incomplete.
 
 ## Project requirements
 
@@ -50,9 +53,28 @@ specs; local Rust checks are unnecessary. State which checks ran and explain
 any skipped or blocked validation. Never report a check as passed unless it ran
 successfully.
 
+## Visual feature demonstrations
+
+Every feature PR that changes visible appearance or user interactions must
+include a recorded video demonstration of the feature in the running
+application. Show the relevant user actions and visible result from the final
+implementation. For browser features, rebuild the executable before recording
+to include the updated assets. Use local fixtures and mocked responses without
+live GitHub access or real credentials.
+
+Attach the video or provide a link reviewers can access in the PR template's
+Video demonstration section. A local file path is insufficient. Screenshots may
+supplement the video but do not replace it. Re-record the demonstration if later
+changes make it inaccurate.
+
+If recording or sharing the video is blocked, explain the blocker in the PR and
+keep it in draft until the video is provided. For features without visual or
+interaction changes, mark the section as not applicable.
+
 ## Review and merge
 
-- Request review once the change and its required validation are ready.
+- Request review once the change, its required validation, and any required
+  video demonstration are ready.
 - Address review feedback and resolve outstanding concerns before merging.
 - Merge only after the PR is out of draft and all existing CI jobs pass
   for the latest revision. The [CI workflow](.github/workflows/ci.yml) checks

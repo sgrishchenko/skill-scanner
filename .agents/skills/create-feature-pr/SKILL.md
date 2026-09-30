@@ -60,8 +60,26 @@ Run the applicable validation from `CONTRIBUTING.md` at the repository root:
 Use local fixtures and mocked HTTP responses for verification. Record actual
 commands or scenarios and their outcomes, including skipped or blocked checks.
 Reuse recorded results only when they still apply to the final change; rerun
-the applicable checks after further code changes. Work or required validation
-that remains incomplete requires a draft PR.
+the applicable checks after further code changes. Work, required validation, or
+a required video demonstration that remains incomplete requires a draft PR.
+
+## Record visual feature demonstrations
+
+For features that change visible appearance or user interactions, follow the
+[video demonstration requirements](../../../CONTRIBUTING.md#visual-feature-demonstrations).
+Record the feature in the running application, showing the relevant user actions
+and visible result from the final implementation. For browser features, rebuild
+the executable before recording to embed updated assets. Use local fixtures and
+mocked responses.
+
+Attach the video or provide a link reviewers can access in the PR's Video
+demonstration section. Confirm that the video is available to reviewers; a local
+file path or screenshots do not satisfy the requirement. Re-record if later
+changes make the demonstration inaccurate. If recording or sharing is blocked,
+explain the blocker and keep the PR in draft until the video is provided. For
+nonvisual features, mark the section as not applicable. For PR-text-only
+requests, use existing video evidence and identify missing evidence without
+recording or uploading anything.
 
 ## Write the title and description
 
@@ -70,10 +88,11 @@ Replace its instructional comments with concrete content. Write a short title
 describing the final change. Explain the problem and resulting behavior, linking
 relevant specs and an issue when one exists; an issue is optional.
 
-Include validation evidence, material risks or limitations, and screenshots
-when they help review visual changes. Mark checklist items only when supported
-by the actual work. Keep the title and description aligned with the final diff,
-including when updating an existing PR.
+Include validation evidence, the required video demonstration for visual
+features, and material risks or limitations. Screenshots may supplement the
+video when useful. Mark checklist items only when supported by the actual work.
+Keep the title and description aligned with the final diff, including when
+updating an existing PR.
 
 ## Publish and report
 
