@@ -45,8 +45,10 @@ warns without failing an otherwise successful scan or hiding its results.
 newest first, without contacting GitHub or requiring credentials. Explain empty
 and disabled history. `skill-scanner recent remove OWNER/REPO` accepts the same
 repository input forms as scanning and persistently removes the matching entry.
-Removing an absent entry succeeds. Both commands follow the CLI's stream,
-escaping, broken-pipe, and exit-code conventions.
+Removing an absent entry or an entry in a missing history directory succeeds
+without creating the directory. A history path that is a regular file is a
+storage error on every supported platform. Both commands follow the CLI's
+stream, escaping, broken-pipe, and exit-code conventions.
 
 The web scan form shows **Recent repositories**, each repository's skill count
 and last successful scan time, and a **Remove** button. Selecting a repository
@@ -77,6 +79,9 @@ Use temporary directories and mocked GitHub or browser scan responses only.
   a complete scan. Disabled history creates no files.
 - Removal via CLI or browser survives reload/restart, affects only the chosen
   entry, and allows it to return after a successful new scan.
+- Removal from a missing history directory succeeds without creating it.
+  A regular file used as the history path is preserved and causes a CLI failure
+  (exit 1) and an HTTP 500 removal response, including on Windows.
 - Concurrent repository writes retain valid records. Corrupt, oversized, and
   incompatible entries do not break the remaining list.
 - Listing and removal require no GitHub access; web endpoints enforce the
