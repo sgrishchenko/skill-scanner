@@ -8,13 +8,19 @@ permissions:
 jobs:
   browser-e2e:
     runs-on: ubuntu-24.04
-    container: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - run: cargo build --locked
       - run: npm ci --prefix tests/e2e
-      - run: npm test --prefix tests/e2e
+      - run: |
+          docker run --rm --init --ipc=host --platform linux/amd64 \
+            --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/work" --workdir /work \
+            mcr.microsoft.com/playwright:v1.63.0-noble npm test --prefix tests/e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
