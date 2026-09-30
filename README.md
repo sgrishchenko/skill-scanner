@@ -199,8 +199,9 @@ compatible with Rust 1.84 (0.8.3 incorrectly uses a newer standard-library API).
 
 Modules separate argument parsing, repository input, GitHub transport, discovery,
 metadata, terminal rendering, and the web server. Browser assets live in `web/`.
-See the [CLI specification](spec/cli.md), [web specification](spec/web.md), and
-[implementation decisions](spec/implementation.md).
+See the [feature specification index](spec/README.md) for behavior and acceptance
+checks, and [implementation decisions](spec/implementation.md) for architecture
+and verification.
 
 ## Releasing
 
