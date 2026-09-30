@@ -3,9 +3,11 @@ pub mod cache;
 pub mod cli;
 pub mod github;
 pub mod metadata;
+pub mod recent;
 pub mod report;
 pub mod repository;
 pub mod scanner;
+mod storage;
 pub mod web;
 
 use std::fmt;

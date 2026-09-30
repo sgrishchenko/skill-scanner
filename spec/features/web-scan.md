@@ -55,9 +55,10 @@ A request during that time can still receive a busy response.
 Keep only the current inventory in page memory. Closing or reloading the page
 discards the displayed results. The shared [analysis cache](analysis-cache.md)
 persists complete analyses on disk, including successful disconnected scans;
-another submission validates the current commit before reuse. There are no
-saved-scan browsing controls, history, server job IDs, polling endpoints, or
-database.
+another submission validates the current commit before reuse. A separate
+[recent repository list](recent-repositories.md) persists successful repository
+summaries and lets users select or remove them. Full saved-result browsing,
+server job IDs, polling endpoints, and a database remain outside scope.
 
 ## Acceptance checks
 
@@ -72,3 +73,5 @@ database.
 - Starting another scan resets the view and filters; reloading clears results.
 - A cached scan announces reuse and renders the same full results and warnings
   as a fresh scan; reloading still requires another submission and validation.
+
+- The recent repository list follows its [acceptance checks](recent-repositories.md#acceptance-checks), including persistence and removal across runs.

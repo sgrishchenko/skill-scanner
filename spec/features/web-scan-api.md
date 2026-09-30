@@ -10,6 +10,8 @@ Status: implemented. This internal HTTP contract serves the
 | `GET /` | Embedded HTML |
 | `GET /app.css`, `GET /app.js`, `GET /favicon.svg` | Embedded assets with appropriate MIME types |
 | `POST /api/scan` | Validate one repository and stream scan events |
+| `GET /api/recent` | List saved successful scans, newest first |
+| `POST /api/recent/remove` | Remove one repository from the recent list |
 
 ## Request validation
 
@@ -35,6 +37,20 @@ Before streaming, errors are JSON with a `message`:
 | 415 | Missing or unsupported JSON content type |
 | 422 | Invalid JSON request shape, missing field, or unknown field |
 
+## Recent repositories
+
+`GET /api/recent` returns `{"enabled":true,"repositories":[...]}`. Each entry
+contains `repository` (normalized string), `scanned_at` (UTC milliseconds since
+the Unix epoch), and `skill_count` (integer). Disabled history returns
+`enabled: false` and an empty list. These reads do not contact GitHub.
+
+`POST /api/recent/remove` uses the same JSON body and validation as `/api/scan`,
+including the action header, content type, input limits, and Host/Origin checks.
+It returns HTTP 204 when removal succeeds or the entry is already absent.
+List/removal storage failures return HTTP 500 with an actionable JSON `message`.
+These routes neither start a scan nor acquire its semaphore. See
+[recent repositories](recent-repositories.md) for persistence and concurrency.
+
 ## Streaming events
 
 Accepted requests return HTTP 200 with
@@ -50,7 +66,9 @@ JSON object. Operation progress arrives before the corresponding GitHub request:
 [progress semantics](skill-discovery.md#progress). A successful scan ends with
 `{"type":"complete","inventory":{...}}`. Only this final event contains an
 inventory. A failed scan ends with `{"type":"error","message":"..."}` and
-no inventory. JSON encoding handles embedded newlines; clients must handle
+no inventory. If saving a completed scan to recent repositories fails, emit
+`{"type":"history_warning","message":"..."}` before the completion event.
+This warning does not fail or hide the inventory. JSON encoding handles embedded newlines; clients must handle
 event boundaries split across chunks.
 
 After repository and commit resolution, an [analysis cache](analysis-cache.md)

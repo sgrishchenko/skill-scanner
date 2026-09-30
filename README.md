@@ -8,6 +8,8 @@ A Rust application with a CLI and local web interface that discovers AI skills i
 skill-scanner scan OWNER/REPO
 skill-scanner scan https://github.com/OWNER/REPO
 skill-scanner serve
+skill-scanner recent
+skill-scanner recent remove OWNER/REPO
 skill-scanner --help
 skill-scanner --version
 ```
@@ -86,6 +88,39 @@ current scan finish in the background before another scan can start. Complete
 analyses are cached on disk; another submission checks the current commit before
 reusing them.
 
+## Recent repositories
+
+Successful CLI and web scans appear in **Recent repositories**, newest first,
+with the last scan time and skill count. The list survives tool and server
+restarts. Select a repository to fill the scan form, or use **Remove** to forget
+it. **Refresh list** picks up scans from other tabs or terminal runs. Failed
+scans do not change the list; repeated scans update the existing entry.
+
+From the terminal, without contacting GitHub:
+
+```sh
+skill-scanner recent
+skill-scanner recent remove OWNER/REPO
+```
+
+Removal persists across restarts and only removes the recent entry. A new
+successful scan adds it again. Displayed results and cached analyses are kept.
+The list starts recording with this feature; existing cache files are not
+imported automatically. Full scan results still disappear on page reload.
+
+| Platform | Default history directory |
+| --- | --- |
+| Linux | `$XDG_STATE_HOME/skill-scanner/recent`, or `$HOME/.local/state/skill-scanner/recent` when XDG_STATE_HOME is unset, empty, or relative |
+| macOS | `$HOME/Library/Application Support/skill-scanner/recent` |
+| Windows | `%LOCALAPPDATA%\skill-scanner\recent` |
+
+Set `SKILL_SCANNER_HISTORY_DIR` to override the history directory, or set it to
+an empty value to disable history. History is separate from the cache; clearing
+or disabling the cache leaves recent repositories intact. History records only
+the repository, completion time, and skill count. If it cannot save an entry,
+the scan succeeds with a warning. See the
+[recent repositories spec](spec/features/recent-repositories.md) for details.
+
 ## Analysis cache
 
 The CLI and web server automatically share a persistent cache of analyzed
@@ -111,7 +146,8 @@ SKILL_SCANNER_CACHE_DIR= skill-scanner serve
 ```
 
 Delete the cache directory to clear it. The cache keeps one completed analysis
-per repository and survives restarts; it does not provide saved scan history.
+per repository and survives restarts. The recent repository list uses separate
+storage.
 Network or access failures still fail the scan because the current commit must
 be checked. Damaged or unavailable cache files fall back to a fresh scan, and
 cache write failures do not fail a completed scan. Entries larger than 32 MiB
@@ -233,8 +269,8 @@ or tokens. Keep `Cargo.lock` checked in; it includes a `yoke-derive` version
 compatible with Rust 1.84 (0.8.3 incorrectly uses a newer standard-library API).
 
 Modules separate argument parsing, repository input, GitHub transport, discovery,
-analysis caching, metadata, terminal rendering, and the web server. Browser
-assets live in `web/`.
+analysis caching, recent repositories, metadata, terminal rendering, and the web
+server. Browser assets live in `web/`.
 See the [feature specification index](spec/README.md) for behavior and acceptance
 checks, and [implementation decisions](spec/implementation.md) for architecture
 and verification.

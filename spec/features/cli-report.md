@@ -13,6 +13,8 @@ skill-scanner scan OWNER/REPO
 skill-scanner scan https://github.com/OWNER/REPO
 skill-scanner serve
 skill-scanner serve --port 8080
+skill-scanner recent
+skill-scanner recent remove OWNER/REPO
 skill-scanner --help
 skill-scanner --version
 ```
@@ -22,6 +24,10 @@ The application resolves the default branch to a commit and scans its contents,
 reusing a matching [cached analysis](analysis-cache.md) when available.
 Read the skill names and descriptions, then follow a GitHub link to inspect a
 source file. `serve` launches the [local web server](local-web-server.md).
+`recent` lists successful prior scans without GitHub access; `recent remove`
+forgets an entry. See [recent repositories](recent-repositories.md) for storage,
+ordering, and removal semantics. History access errors exit 1; successful list
+and removal operations exit 0, and invalid repository inputs exit 2.
 Branch selection and CLI JSON export remain deferred.
 
 ## Output streams and progress

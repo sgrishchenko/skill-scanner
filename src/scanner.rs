@@ -4,6 +4,7 @@ use crate::{
     cache::ScanCache,
     github::{validate_sha, BlobContent, GitHubClient, Tree, TreeEntry, MAX_SKILL_BYTES},
     metadata::{self, Metadata, MetadataWarning},
+    recent::RecentRepositories,
     repository::Repository,
     ScanError,
 };
@@ -29,6 +30,7 @@ pub enum ScanProgress<'a> {
     Repository(&'a Repository),
     DefaultBranch(&'a str),
     Cached(&'a str),
+    HistoryWarning(&'a str),
     DiscoveringSkills,
     Directory(&'a str),
     Skill {
@@ -49,6 +51,24 @@ pub fn scan_with_progress(
     progress: impl FnMut(ScanProgress<'_>),
 ) -> Result<Inventory, ScanError> {
     scan_with_cache(client, repository, &ScanCache::disabled(), progress)
+}
+
+/// Both interfaces remember only successful scans, including cache hits and
+/// empty repositories. History failures leave the completed inventory usable.
+pub fn scan_with_storage(
+    client: &GitHubClient,
+    repository: &Repository,
+    cache: &ScanCache,
+    recent: &RecentRepositories,
+    mut progress: impl FnMut(ScanProgress<'_>),
+) -> Result<Inventory, ScanError> {
+    let inventory = scan_with_cache(client, repository, cache, &mut progress)?;
+    if recent.record(&inventory).is_err() {
+        progress(ScanProgress::HistoryWarning(
+            "Scan completed, but the repository could not be saved to recent repositories. Check SKILL_SCANNER_HISTORY_DIR and directory permissions.",
+        ));
+    }
+    Ok(inventory)
 }
 
 /// Revalidate the public repository and current commit before reusing analysis.

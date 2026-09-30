@@ -43,11 +43,30 @@ the format version when discovery or metadata semantics change without a
 package version bump. Recompute aggregation from the cached inventory using
 shared Rust logic.
 
+Use the shared `storage` helper for atomic file replacement.
 Use one case-insensitive repository path per entry, with prefixed components
 safe for supported filesystems. Limit cache reads and stored entries to 32 MiB.
 Write a unique sibling temporary file, sync and close it, then rename it over
 the entry. Failed writes leave the prior entry intact and remove the temporary
 file when possible. No database, lock service, or cache dependency is needed.
+
+## Recent repository storage
+
+Keep lightweight repository summaries in `recent`, separate from the disposable
+analysis cache, using the shared atomic-file writer in `storage`. CLI and web
+entry points configure `RecentRepositories` from the environment and call
+`scan_with_storage`, which wraps the existing cached scanner. Only a successful
+inventory updates history. A history write failure emits a warning without
+changing scan success; the web protocol carries it as `history_warning`.
+
+Each repository has one flat, case-insensitive, validated filename and a
+versioned JSON record. Per-repository atomic replacement avoids a shared index
+and preserves concurrent writes to different repositories. Listing reads disk
+and sorts completion timestamps. History does not depend on the scanner package
+version, cached inventories, browser storage, or server port. Web list/removal
+operations run on `spawn_blocking` and use the normal local request protections.
+The [recent repositories feature](features/recent-repositories.md) defines
+locations, retention, error behavior, and concurrency semantics.
 
 ## Shared aggregation
 
@@ -84,6 +103,7 @@ real credentials.
 | Repository input, metadata, aggregation, and terminal rendering | Unit tests for parsing, grouping, ordering, warnings, output, and escaping |
 | GitHub access and discovery | Fixtures and local mock HTTP cover snapshots, authentication, truncation fallback, limits, retries, failures, and empty repositories |
 | Analysis cache | Temporary directories and mocked HTTP verify persisted reuse, commit invalidation, cross-interface sharing, warnings, corrupt entries, failed refreshes, and unavailable storage |
+| Recent repositories | Temporary storage and mock scans verify ordering, deduplication, successful-only recording, concurrent writes, corruption handling, cross-interface persistence, and removal; subprocess tests verify offline CLI use |
 | CLI | Subprocess tests verify exit codes and stdout/stderr separation |
 | Web API and scan lifecycle | In-process HTTP tests exercise the real scanner against mocked GitHub responses, including streaming, warnings, errors, empty results, concurrency, disconnects, input/body limits, and Host/Origin checks |
 | Embedded server | CLI subprocess tests start the site from another working directory and check port errors |

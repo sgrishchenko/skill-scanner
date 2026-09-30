@@ -41,6 +41,13 @@
           </div>
           <div class="form-bottom"><p id="repository-hint">We’ll explore the default branch and find every <code>SKILL.md</code>.</p><div class="examples"><span>Try</span><button type="button" data-repository="anthropics/skills">anthropics/skills <span aria-hidden="true">↗</span></button><button type="button" data-repository="openai/skills">openai/skills <span aria-hidden="true">↗</span></button></div></div>
         </form>
+        <section class="recent-section" aria-labelledby="recent-title">
+          <div class="recent-heading"><h3 id="recent-title">Recent repositories</h3><button id="refresh-recent" class="text-button" type="button">Refresh list</button></div>
+          <p class="recent-hint">Saved on this machine. Select a repository to scan it again.</p>
+          <p id="recent-status" class="recent-hint" role="status" aria-live="polite">Loading recent repositories…</p>
+          <p id="recent-error" class="error-panel" role="alert" hidden></p>
+          <ul id="recent-list" class="recent-list"></ul>
+        </section>
         <noscript><p class="error-panel">Enable JavaScript to scan repositories in this interface, or use <code>skill-scanner scan OWNER/REPO</code> in a terminal.</p></noscript>
         <div id="error" class="error-panel" role="alert" tabindex="-1" hidden><strong>Scan couldn’t finish</strong><p id="error-message"></p></div>
         <div id="progress-panel" class="progress-panel" hidden>

@@ -22,13 +22,16 @@ use crate::{
 #[path = "web_tests.rs"]
 mod web;
 
+#[path = "recent_scan_tests.rs"]
+mod recent;
+
 #[path = "cache_tests.rs"]
 mod cache;
 
-struct TestDirectory(std::path::PathBuf);
+pub(crate) struct TestDirectory(pub(crate) std::path::PathBuf);
 
 impl TestDirectory {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         loop {
             let path = std::env::temp_dir().join(format!(
