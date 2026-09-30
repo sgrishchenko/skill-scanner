@@ -39,8 +39,10 @@ run unchanged. This tests the browser workflow and shared history, while
 scanner recording behavior with mocked GitHub responses.
 
 Viewport, device scale, browser version, locale, UTC timezone, motion preference,
-and fixture timestamps are fixed. No application content is masked. Scan
-responses are held until disabled controls are asserted; DOM assertions determine
+and fixture timestamps are fixed. Chromium uses software rendering, full tile
+rasterization, and the sRGB color profile. Screenshots cover the full page,
+including the skill cards below the video viewport. No application content is
+masked. Scan responses are held until disabled controls are asserted; DOM assertions determine
 readiness before each screenshot. Short pauses after successful comparisons
 make the recorded actions readable. Pixel differences fail the test, retries
 are disabled, and `npm test` never creates or updates a baseline.

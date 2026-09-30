@@ -13,7 +13,7 @@ test('recent repositories persist, update, and can be removed without losing res
   async function checkpoint(name) {
     await page.locator('.scan-panel').evaluate((panel) => window.scrollTo(0, panel.offsetTop - 24));
     await page.mouse.move(0, 0);
-    await expect(page).toHaveScreenshot(`${name}.png`);
+    await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true });
     testInfo.annotations.push({ type: 'checkpoint', description: name });
     // Assertions above determine readiness. This pause only makes the same
     // passing test's video readable; it is never used to synchronize the UI.
