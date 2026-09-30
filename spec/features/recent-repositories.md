@@ -38,6 +38,8 @@ same repository use the last filesystem update. Ignore malformed,
 incompatible, mismatched, and oversized (over 4 KiB) records when listing.
 Storage access errors are actionable list/removal errors. A recording failure
 warns without failing an otherwise successful scan or hiding its results.
+On Windows, listing retries transient entry-open conflicts during atomic
+replacement with a short, bounded delay; persistent access errors remain errors.
 
 ## Listing and removal
 
@@ -84,6 +86,9 @@ Use temporary directories and mocked GitHub or browser scan responses only.
   (exit 1) and an HTTP 500 removal response, including on Windows.
 - Concurrent repository writes retain valid records. Corrupt, oversized, and
   incompatible entries do not break the remaining list.
+- Windows entry reads recover from transient atomic-replacement conflicts;
+  persistent access errors still fail after bounded retries, and missing entries
+  can be skipped without retrying.
 - Listing and removal require no GitHub access; web endpoints enforce the
   [local request protections](local-web-server.md#local-request-protection).
 - Browser checks exercise reload, selection, removal, empty states, failure
