@@ -107,12 +107,19 @@ fn recent_commands_persist_removal_and_work_without_valid_github_credentials() {
         .contains("disabled"));
     let file = directory.0.join("file");
     std::fs::write(&file, "file").unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
-        .arg("recent")
-        .env("SKILL_SCANNER_HISTORY_DIR", file)
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(1));
+    for args in [&["recent"][..], &["recent", "remove", "example/skills"][..]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
+            .args(args)
+            .env("SKILL_SCANNER_HISTORY_DIR", &file)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("SKILL_SCANNER_HISTORY_DIR"));
+    }
+    assert_eq!(std::fs::read_to_string(file).unwrap(), "file");
 }
 
 #[test]

@@ -163,7 +163,18 @@ impl RecentRepositories {
             return Ok(());
         };
         match fs::remove_file(root.join(Self::filename(repository)?)) {
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                // Windows also reports NotFound when root is a regular file.
+                // Only a missing entry or history directory is a successful no-op.
+                match fs::metadata(root) {
+                    Ok(metadata) if !metadata.is_dir() => Err(io::Error::new(
+                        io::ErrorKind::NotADirectory,
+                        "Recent repository history path is not a directory.",
+                    )),
+                    Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+                    _ => Ok(()),
+                }
+            }
             result => result,
         }
     }

@@ -83,16 +83,18 @@ fn disabled_missing_and_unavailable_storage_are_distinct() {
     assert!(!directory.0.join("missing").exists());
     let disabled = RecentRepositories::disabled();
     disabled.record(&inventory("example/skills")).unwrap();
+    disabled.remove(&"example/skills".parse().unwrap()).unwrap();
     assert!(!disabled.is_enabled());
     assert!(disabled.list().unwrap().is_empty());
     let file = directory.0.join("file");
     fs::write(&file, "not a directory").unwrap();
-    let unavailable = RecentRepositories::new(file);
+    let unavailable = RecentRepositories::new(file.clone());
     assert!(unavailable.list().is_err());
     assert!(unavailable.record(&inventory("example/skills")).is_err());
     assert!(unavailable
         .remove(&"example/skills".parse().unwrap())
         .is_err());
+    assert_eq!(fs::read_to_string(file).unwrap(), "not a directory");
 }
 
 #[test]
