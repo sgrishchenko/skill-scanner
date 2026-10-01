@@ -1,5 +1,5 @@
 {
-  "tested_revision": "55d4ea301f45a8b591d0e667c4fc5a7a9289404f",
+  "tested_revision": "c6eadbe03868b1e000f5db71023c8c1bf9fcb93d",
   "environment": "mcr.microsoft.com/playwright:v1.63.0-noble (linux/amd64)",
   "result": "passed",
   "baseline_updates": "none",
@@ -15,7 +15,7 @@
     "09-removal-persists-after-restart"
   ],
   "sha256": {
-    "mp4": "a88c7cb8b368834929a5d3c8d5858347d36c135801ff2423533267010876d656",
-    "gif": "f28a23022de66ee33a35aefdad5f35bb24fe61410f383e005b107770fcb07ba5"
+    "mp4": "93d6db5a54666d3e29d339e9452df1bb71d27cf0813571dd8445743d2013aba3",
+    "gif": "0a287d32b5262c71daa81d4ff2767b09ddf3c5b68261a970ba85f1933e33c87c"
   }
 }
