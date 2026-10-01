@@ -19,6 +19,43 @@ impl Repository {
     }
 }
 
+/// A GitHub organization or user account whose public repositories are scanned.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Owner {
+    pub login: String,
+}
+
+impl fmt::Display for Owner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.login)
+    }
+}
+
+impl FromStr for Owner {
+    type Err = String;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let path = input.strip_prefix("https://github.com/").unwrap_or(input);
+        let login = path.strip_suffix('/').unwrap_or(path);
+        if !valid_owner(login) {
+            return Err("expected OWNER or https://github.com/OWNER (one GitHub organization or user, without a repository, query, or fragment)".to_owned());
+        }
+        Ok(Self {
+            login: login.to_owned(),
+        })
+    }
+}
+
+fn valid_owner(owner: &str) -> bool {
+    !owner.is_empty()
+        && owner.len() <= 39
+        && owner
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        && !owner.starts_with('-')
+        && !owner.ends_with('-')
+}
+
 impl fmt::Display for Repository {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.owner, self.name)
@@ -41,13 +78,7 @@ impl FromStr for Repository {
         let path = path.strip_suffix('/').unwrap_or(path);
         let (owner, name) = path.split_once('/').ok_or_else(invalid)?;
         let name = name.strip_suffix(".git").unwrap_or(name);
-        if owner.is_empty()
-            || owner.len() > 39
-            || !owner
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
-            || owner.starts_with('-')
-            || owner.ends_with('-')
+        if !valid_owner(owner)
             || name.is_empty()
             || name.len() > 100
             || name == "."
@@ -111,6 +142,40 @@ mod tests {
             "a/b\\c",
         ] {
             assert!(input.parse::<Repository>().is_err(), "accepted {input}");
+        }
+    }
+
+    #[test]
+    fn accepts_owner_identifiers_and_urls_only() {
+        for input in [
+            "JetBrains",
+            "JetBrains/",
+            "https://github.com/JetBrains",
+            "https://github.com/JetBrains/",
+        ] {
+            assert_eq!(input.parse::<Owner>().unwrap().to_string(), "JetBrains");
+        }
+        let long = "a".repeat(40);
+        for input in [
+            "",
+            "/",
+            "JetBrains/skills",
+            "https://github.com/JetBrains/skills",
+            "https://github.com/orgs/JetBrains",
+            "JetBrains//",
+            " JetBrains",
+            "-JetBrains",
+            "JetBrains-",
+            "Jet_Brains",
+            "JetBrains?type=all",
+            "JetBrains#repos",
+            "http://github.com/JetBrains",
+            "https://github.com:443/JetBrains",
+            "https://user:secret@github.com/JetBrains",
+            "https://github.com/..",
+            long.as_str(),
+        ] {
+            assert!(input.parse::<Owner>().is_err(), "accepted {input}");
         }
     }
 

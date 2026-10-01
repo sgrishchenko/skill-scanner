@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 let inventory = null;
 let busy = false;
 let groupedView = true;
+let organizationMode = false;
 let recentRequest = 0;
 const removingRepositories = new Set();
 // Starred skills by case-insensitive repository and exact path.
@@ -36,18 +37,46 @@ function setBusy(value) {
   busy = value;
   $("scan-button").disabled = value;
   $("repository").disabled = value;
-  document.querySelectorAll("[data-repository]").forEach((button) => { button.disabled = value; });
+  $("repository-mode").disabled = value;
+  $("organization-mode").disabled = value;
+  document.querySelectorAll("[data-repository],[data-organization]").forEach((button) => { button.disabled = value; });
   document.querySelectorAll("[data-remove-repository]").forEach((button) => {
     button.disabled = value || removingRepositories.has(button.dataset.removeRepository);
   });
-  $("scan-button-text").textContent = value ? "Scanning…" : "Scan repository";
+  $("scan-button-text").textContent = value ? "Scanning…" : organizationMode ? "Scan organization" : "Scan repository";
   $("results-section").setAttribute("aria-busy", String(value));
   $("progress-panel").hidden = !value;
 }
 
+function setMode(organization) {
+  if (busy) return;
+  organizationMode = organization;
+  $("repository-mode").setAttribute("aria-pressed", String(!organization));
+  $("organization-mode").setAttribute("aria-pressed", String(organization));
+  $("scan-title").textContent = organization ? "Start with an organization" : "Start with a repository";
+  $("target-label").textContent = organization ? "GitHub organization or user" : "GitHub repository";
+  $("repository").placeholder = organization
+    ? "organization or https://github.com/organization"
+    : "owner/repository or https://github.com/owner/repository";
+  $("repository").setAttribute("aria-describedby", organization ? "organization-hint" : "repository-hint");
+  $("repository-hint").hidden = organization;
+  $("organization-hint").hidden = !organization;
+  $("repository-examples").hidden = organization;
+  $("organization-examples").hidden = !organization;
+  $("scan-button-text").textContent = organization ? "Scan organization" : "Scan repository";
+}
+
 function selectRepository(repository) {
   if (busy) return;
+  setMode(false);
   $("repository").value = repository;
+  $("repository").focus();
+}
+
+function selectOrganization(organization) {
+  if (busy) return;
+  setMode(true);
+  $("repository").value = organization;
   $("repository").focus();
 }
 
@@ -130,6 +159,19 @@ function starKey(repository, path) {
   return `${repository.toLowerCase()}\n${path}`;
 }
 
+// Stars address a repository-relative path at a scanned commit. Organization
+// results prefix each path with owner/repository, which names its repository.
+function starSource(skill) {
+  let source = { repository: inventory.repository, path: skill.path, commit: inventory.commit };
+  if (inventory.organization !== undefined) {
+    const [owner, name, ...rest] = skill.path.split("/");
+    const repository = `${owner}/${name}`;
+    const commit = inventory.repositories.find((summary) => summary.repository === repository)?.commit;
+    source = { repository, path: rest.join("/"), commit };
+  }
+  return { ...source, key: starKey(source.repository, source.path) };
+}
+
 function connectionMessage(error) {
   return error instanceof TypeError ? "Could not connect to the local server. Retry when it is running." : error.message;
 }
@@ -140,8 +182,8 @@ function showStarredError(message) {
 }
 
 function updateStarButtons() {
-  document.querySelectorAll("[data-star-path]").forEach((button) => {
-    const key = starKey(inventory.repository, button.dataset.starPath);
+  document.querySelectorAll("[data-star-key]").forEach((button) => {
+    const key = button.dataset.starKey;
     const pressed = starred.has(key);
     button.setAttribute("aria-pressed", String(pressed));
     // Disabling the button would drop keyboard focus; setStar ignores repeats.
@@ -183,7 +225,7 @@ async function refreshStarred() {
       unstar.type = "button";
       unstar.dataset.unstarKey = key;
       unstar.setAttribute("aria-label", `Unstar ${skill.path} in ${skill.repository}`);
-      unstar.addEventListener("click", () => setStar(skill, skill.repository, null, false));
+      unstar.addEventListener("click", () => setStar(skill, skill, false));
       actions.append(link, unstar);
       row.append(details, actions);
       list.append(row);
@@ -207,8 +249,9 @@ async function refreshStarred() {
   }
 }
 
-async function setStar(skill, repository, commit, adding) {
-  const key = starKey(repository, skill.path);
+async function setStar(skill, source, adding) {
+  const { repository, path, commit } = source;
+  const key = starKey(repository, path);
   if (pendingStars.has(key)) return;
   const fromList = $("starred-list").contains(document.activeElement);
   pendingStars.add(key);
@@ -220,8 +263,8 @@ async function setStar(skill, repository, commit, adding) {
       headers: { "Content-Type": "application/json", "X-Skill-Scanner": "1" },
       // The server keeps at most 200 characters of a name.
       body: JSON.stringify(adding
-        ? { repository, path: skill.path, name: Array.from(skill.name).slice(0, 200).join(""), commit }
-        : { repository, path: skill.path }),
+        ? { repository, path, name: Array.from(skill.name).slice(0, 200).join(""), commit }
+        : { repository, path }),
       cache: "no-store",
     });
     if (!response.ok) {
@@ -257,10 +300,11 @@ function skillCard(skill, heading = "h3") {
   if (starredEnabled) {
     const star = node("button", "star-button");
     star.type = "button";
-    star.dataset.starPath = skill.path;
+    const source = starSource(skill);
+    star.dataset.starKey = source.key;
     star.setAttribute("aria-label", `Star ${skill.path}`);
     star.addEventListener("click", () => {
-      setStar(skill, inventory.repository, inventory.commit, !starred.has(starKey(inventory.repository, skill.path)));
+      setStar(skill, source, !starred.has(star.dataset.starKey));
     });
     title.append(star);
   }
@@ -319,6 +363,38 @@ function setView(grouped) {
   renderSkills();
 }
 
+function renderRepositories(result) {
+  const failed = result.repositories.filter((repository) => repository.error);
+  const withSkills = result.repositories.filter((repository) => !repository.error && repository.skill_count);
+  const withoutSkills = result.repositories.filter((repository) => !repository.error && !repository.skill_count);
+  const rows = document.createDocumentFragment();
+  for (const repository of [...failed, ...withSkills]) {
+    const row = node("li", repository.error ? "repository-result failed" : "repository-result");
+    row.append(node("strong", "", repository.repository));
+    const detail = node("p", "", repository.error || `${repository.skill_count} skill${repository.skill_count === 1 ? "" : "s"} · `);
+    if (!repository.error) {
+      const link = externalLink(`Commit ${repository.commit.slice(0, 7)} ↗`, `https://github.com/${repository.repository}/commit/${repository.commit}`);
+      link.title = repository.commit;
+      link.setAttribute("aria-label", `Scanned commit ${repository.commit} of ${repository.repository} on GitHub (opens in a new tab)`);
+      detail.append(link);
+    }
+    row.append(detail);
+    rows.append(row);
+  }
+  $("repository-results").replaceChildren(rows);
+  const names = document.createDocumentFragment();
+  withoutSkills.forEach((repository) => names.append(node("li", "", repository.commit ? repository.repository : `${repository.repository} (empty)`)));
+  $("without-skills-list").replaceChildren(names);
+  $("without-skills-summary").textContent = `${withoutSkills.length} repositor${withoutSkills.length === 1 ? "y" : "ies"} without skills`;
+  $("repositories-without-skills").hidden = withoutSkills.length === 0;
+  $("repositories-without-skills").open = false;
+  $("incomplete-panel").hidden = failed.length === 0;
+  $("incomplete-message").textContent = `${failed.length} of ${result.repositories.length} repositories could not be scanned, so their skills are missing from these results. Scan them individually or retry later.`;
+  const forks = result.skipped_forks;
+  $("result-commit").textContent = `${result.repositories.length} public repositor${result.repositories.length === 1 ? "y" : "ies"} scanned · ${withSkills.length} with skills · ${forks} fork${forks === 1 ? "" : "s"} skipped`;
+  return failed.length;
+}
+
 function renderSkills() {
   if (!inventory) return;
   const query = $("search").value.trim().toLocaleLowerCase();
@@ -333,7 +409,7 @@ function renderSkills() {
     const indices = group.skill_indices.filter((index) => {
       const skill = inventory.skills[index];
       return (!warningsOnly || skill.warnings.length > 0) &&
-        (!starredOnly || starred.has(starKey(inventory.repository, skill.path))) &&
+        (!starredOnly || starred.has(starSource(skill).key)) &&
         [skill.name, skill.description, skill.path].some((text) => text.toLocaleLowerCase().includes(query));
     });
     if (indices.length) {
@@ -359,6 +435,14 @@ function renderSkills() {
     if (inventory.skills.length) {
       $("empty-title").textContent = "No skills match your filters";
       $("empty-description").textContent = "Try another search, or clear the filters to see all discovered skills.";
+    } else if (inventory.organization !== undefined) {
+      const scanned = inventory.repositories.some((repository) => !repository.error);
+      $("empty-title").textContent = scanned ? "No SKILL.md files found" : "No repositories scanned";
+      $("empty-description").textContent = scanned
+        ? "The scan finished. There are no regular SKILL.md files on the default branches of the scanned repositories."
+        : inventory.repositories.length
+          ? "None of this organization’s repositories could be scanned. Review the failures above, then retry."
+          : "This organization or user has no public repositories to scan, apart from any forks.";
     } else {
       $("empty-title").textContent = inventory.commit ? "No SKILL.md files found" : "This repository is empty";
       $("empty-description").textContent = inventory.commit
@@ -370,7 +454,10 @@ function renderSkills() {
 
 function renderInventory(result) {
   inventory = result;
-  $("result-repository").textContent = result.repository;
+  const organization = result.organization !== undefined;
+  $("result-kind").textContent = organization ? "ORGANIZATION" : "REPOSITORY";
+  $("result-repository").textContent = organization ? result.organization : result.repository;
+  $("organization-repositories").hidden = !organization;
   $("skill-count").textContent = result.skills.length;
   const stats = result.aggregation.statistics;
   $("warning-count").textContent = stats.skills_with_warnings;
@@ -380,7 +467,10 @@ function renderInventory(result) {
   $("standalone-count").textContent = stats.standalone_skills;
   $("largest-group-count").textContent = stats.largest_group;
   $("result-commit").replaceChildren();
-  if (result.commit) {
+  let failed = 0;
+  if (organization) {
+    failed = renderRepositories(result);
+  } else if (result.commit) {
     const link = externalLink(`Commit ${result.commit.slice(0, 7)} ↗`, `https://github.com/${result.repository}/commit/${result.commit}`);
     link.title = result.commit;
     link.setAttribute("aria-label", `Scanned commit ${result.commit} on GitHub (opens in a new tab)`);
@@ -389,7 +479,9 @@ function renderInventory(result) {
     $("result-commit").textContent = "No commit to scan";
   }
   $("result-controls").hidden = result.skills.length === 0;
-  $("results-status").textContent = "Scan complete";
+  $("results-status").textContent = failed
+    ? `Incomplete · ${failed} repositor${failed === 1 ? "y" : "ies"} failed`
+    : "Scan complete";
   renderSkills();
   $("initial-state").hidden = true;
   $("scan-results").hidden = false;
@@ -448,6 +540,7 @@ $("scan-form").addEventListener("submit", async (event) => {
   if (busy) return;
   const repository = $("repository").value.trim();
   if (!repository) { $("repository").focus(); return; }
+  const organization = organizationMode;
   inventory = null;
   $("error").hidden = true;
   $("recent-error").hidden = true;
@@ -458,14 +551,14 @@ $("scan-form").addEventListener("submit", async (event) => {
   $("similar-only").checked = false;
   $("starred-only").checked = false;
   setView(true);
-  $("results-status").textContent = "Scanning repository…";
+  $("results-status").textContent = organization ? "Scanning organization…" : "Scanning repository…";
   updateProgress({ message: "Connecting to GitHub…" });
   setBusy(true);
   try {
-    const response = await fetch("/api/scan", {
+    const response = await fetch(organization ? "/api/scan-org" : "/api/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Skill-Scanner": "1" },
-      body: JSON.stringify({ repository }),
+      body: JSON.stringify(organization ? { organization: repository } : { repository }),
       cache: "no-store",
     });
     if (!response.ok) {
@@ -491,6 +584,13 @@ document.querySelectorAll("[data-repository]").forEach((button) => {
     selectRepository(button.dataset.repository);
   });
 });
+document.querySelectorAll("[data-organization]").forEach((button) => {
+  button.addEventListener("click", () => {
+    selectOrganization(button.dataset.organization);
+  });
+});
+$("repository-mode").addEventListener("click", () => setMode(false));
+$("organization-mode").addEventListener("click", () => setMode(true));
 $("search").addEventListener("input", renderSkills);
 $("warnings-only").addEventListener("change", renderSkills);
 $("similar-only").addEventListener("change", renderSkills);

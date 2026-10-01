@@ -742,6 +742,178 @@ fn unavailable_history_returns_errors_and_a_warning_without_losing_scan_results(
     );
 }
 
+fn organization_request(body: &str) -> Request<Body> {
+    request("POST", "/api/scan-org", body)
+}
+
+#[test]
+fn organization_scan_streams_repository_progress_then_one_combined_inventory() {
+    use super::organization_scan::{commit, listed, listing, recursive_tree, repository_blob};
+    let replies = vec![
+        listing(1, vec![listed("tools"), listed("broken")]),
+        commit("broken"),
+        recursive_tree("broken", true, vec![]),
+        commit("tools"),
+        recursive_tree("tools", false, vec![skill("review/SKILL.md", A)]),
+        repository_blob("tools", A, VALID),
+    ];
+    with_web(replies, |app, runtime| {
+        runtime.block_on(async {
+            let response = app
+                .oneshot(organization_request(r#"{"organization":" example "}"#))
+                .await
+                .unwrap();
+            let events = events(response).await;
+            assert_eq!(
+                events[0],
+                json!({"type": "progress", "message": "Listing public repositories: example (page 1)", "current": null, "total": null})
+            );
+            assert_eq!(
+                events[1],
+                json!({"type": "progress", "message": "Scanning repository [1/2]: example/broken", "current": 1, "total": 2})
+            );
+            assert_eq!(
+                events[2]["message"],
+                "example/broken: Resolving default branch: main"
+            );
+            assert_eq!(events[2]["current"], 1);
+            // Repository counters, not nested skill counters, drive the progress bar.
+            assert!(events.iter().any(|event| event["message"]
+                == "example/tools: Scanning skill [1/1]: review/SKILL.md"
+                && event["current"] == 2
+                && event["total"] == 2));
+            let last = events.last().unwrap();
+            assert_eq!(last["type"], "complete");
+            let inventory = &last["inventory"];
+            assert_eq!(inventory["organization"], "example");
+            assert_eq!(inventory["skipped_forks"], 0);
+            assert!(inventory.get("repository").is_none());
+            assert_eq!(inventory["repositories"][0]["repository"], "example/broken");
+            assert_eq!(inventory["repositories"][0]["commit"], Value::Null);
+            assert!(inventory["repositories"][0]["error"]
+                .as_str()
+                .unwrap()
+                .contains("scan this repository individually"));
+            assert_eq!(
+                inventory["repositories"][1],
+                json!({"repository": "example/tools", "commit": COMMIT, "skill_count": 1, "error": null})
+            );
+            assert_eq!(
+                inventory["skills"][0]["path"],
+                "example/tools/review/SKILL.md"
+            );
+            assert_eq!(
+                inventory["skills"][0]["link"],
+                format!("https://github.com/example/tools/blob/{COMMIT}/review/SKILL.md")
+            );
+            assert_eq!(inventory["aggregation"]["statistics"]["total_skills"], 1);
+            assert_eq!(
+                inventory["aggregation"]["groups"][0]["skill_indices"],
+                json!([0])
+            );
+        })
+    });
+}
+
+#[test]
+fn organization_scans_validate_input_without_contacting_github_or_echoing_secrets() {
+    with_web(vec![], |app, runtime| {
+        runtime.block_on(async {
+            for (body, status) in [
+                (
+                    r#"{"organization":"example/skills"}"#,
+                    StatusCode::BAD_REQUEST,
+                ),
+                (
+                    r#"{"organization":"https://name:secret@github.com/example"}"#,
+                    StatusCode::BAD_REQUEST,
+                ),
+                ("{invalid", StatusCode::BAD_REQUEST),
+                (
+                    r#"{"repository":"example"}"#,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                ),
+                (
+                    r#"{"organization":"example","token":"secret"}"#,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                ),
+            ] {
+                let response = app
+                    .clone()
+                    .oneshot(organization_request(body))
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), status, "{body}");
+                let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+                assert!(!std::str::from_utf8(&bytes).unwrap().contains("secret"));
+            }
+            let unmarked = Request::builder()
+                .method("POST")
+                .uri("/api/scan-org")
+                .header("host", HOST)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"organization":"example"}"#))
+                .unwrap();
+            let response = app.clone().oneshot(unmarked).await.unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            let response = app
+                .oneshot(organization_request(&"x".repeat(4097)))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        })
+    });
+}
+
+#[test]
+fn repository_and_organization_scans_share_one_scan_at_a_time() {
+    let mut replies = snapshot();
+    // Enough progress to fill the bounded channel keeps the first scan running.
+    replies.push(tree(
+        ROOT,
+        true,
+        false,
+        (0..10)
+            .map(|n| skill(&format!("{n}/SKILL.md"), A))
+            .collect(),
+    ));
+    replies.extend((0..10).map(|_| blob(A, VALID)));
+    replies.push(super::organization_scan::listing(1, vec![]));
+    with_web(replies, |app, runtime| {
+        runtime.block_on(async {
+            let body = r#"{"organization":"example"}"#;
+            let first = app.clone().oneshot(scan_request()).await.unwrap();
+            assert_eq!(first.status(), StatusCode::OK);
+            let second = app
+                .clone()
+                .oneshot(organization_request(body))
+                .await
+                .unwrap();
+            assert_eq!(second.status(), StatusCode::CONFLICT);
+            drop(first);
+            let response = tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let response = app
+                        .clone()
+                        .oneshot(organization_request(body))
+                        .await
+                        .unwrap();
+                    if response.status() != StatusCode::CONFLICT {
+                        break response;
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            let events = events(response).await;
+            let inventory = &events.last().unwrap()["inventory"];
+            assert_eq!(inventory["repositories"], json!([]));
+            assert_eq!(inventory["aggregation"]["statistics"]["total_skills"], 0);
+        })
+    });
+}
+
 async fn starred_list(app: &Router) -> Value {
     let response = app
         .clone()
