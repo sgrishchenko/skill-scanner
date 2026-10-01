@@ -7,7 +7,7 @@ behavior and compares named screenshots against reviewed baselines:
 | --- | --- | --- |
 | [Recent repositories](recent-repositories.spec.mjs) | [Nine screenshots](snapshots/recent-repositories.spec.mjs) | [Recording](../../docs/demos/recent-repositories.md) |
 | [Starred skills](starred-skills.spec.mjs) | [Nine screenshots](snapshots/starred-skills.spec.mjs) | [Recording](../../docs/demos/starred-skills.md) |
-| [Organization scan](organization-scan.spec.mjs) | [Five screenshots](snapshots/organization-scan.spec.mjs) | Not yet recorded |
+| [Organization scan](organization-scan.spec.mjs) | [Five screenshots](snapshots/organization-scan.spec.mjs) | [Recording](../../docs/demos/organization-scan.md) |
 
 The demos follow the
 [PR demonstration requirements](../../CONTRIBUTING.md#visual-feature-demonstrations).
