@@ -10,16 +10,17 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::{mpsc, OwnedSemaphorePermit, Semaphore};
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
     aggregation::{self, Aggregation},
     cache::ScanCache,
     github::GitHubClient,
+    organization::{self, OrganizationInventory, OrganizationProgress, RepositorySummary},
     recent::RecentRepositories,
     report,
-    repository::Repository,
+    repository::{Owner, Repository},
     scanner::{self, Inventory, ScanProgress, Skill},
 };
 
@@ -37,6 +38,12 @@ struct WebState {
 #[serde(deny_unknown_fields)]
 struct ScanRequest {
     repository: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrganizationRequest {
+    organization: String,
 }
 
 #[derive(Serialize)]
@@ -59,6 +66,35 @@ impl From<Inventory> for WebInventory {
 }
 
 #[derive(Serialize)]
+struct WebOrganization {
+    organization: String,
+    repositories: Vec<RepositorySummary>,
+    skipped_forks: usize,
+    skills: Vec<Skill>,
+    aggregation: Aggregation,
+}
+
+impl From<OrganizationInventory> for WebOrganization {
+    fn from(inventory: OrganizationInventory) -> Self {
+        Self {
+            aggregation: aggregation::aggregate(&inventory.skills),
+            organization: inventory.owner.to_string(),
+            repositories: inventory.repositories,
+            skipped_forks: inventory.skipped_forks,
+            skills: inventory.skills,
+        }
+    }
+}
+
+/// Clients know which shape to expect from the route they called.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum CompletedInventory {
+    Repository(WebInventory),
+    Organization(WebOrganization),
+}
+
+#[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Event {
     Progress {
@@ -70,7 +106,7 @@ enum Event {
         message: String,
     },
     Complete {
-        inventory: WebInventory,
+        inventory: CompletedInventory,
     },
     Error {
         message: String,
@@ -142,6 +178,7 @@ pub(crate) fn router(
             get(|| async { asset("image/svg+xml", include_str!("../web/favicon.svg")) }),
         )
         .route("/api/scan", post(scan))
+        .route("/api/scan-org", post(scan_organization))
         .route("/api/recent", get(list_recent))
         .route("/api/recent/remove", post(remove_recent))
         .fallback(|| async { error(StatusCode::NOT_FOUND, "Page not found.") })
@@ -266,15 +303,9 @@ async fn scan(
         Err(message) => return error(StatusCode::BAD_REQUEST, &message),
     };
     let Ok(permit) = state.available.try_acquire_owned() else {
-        return error(
-            StatusCode::CONFLICT,
-            "A scan is already running. Wait for it to finish, then try again.",
-        );
+        return busy();
     };
-    // A bounded channel applies backpressure without retaining a scan job.
-    let (sender, receiver) = mpsc::channel::<Result<String, Infallible>>(8);
-    tokio::task::spawn_blocking(move || {
-        let _permit = permit;
+    stream_events(permit, move |emit| {
         let result = scanner::scan_with_storage(
             &state.client,
             &repository,
@@ -282,42 +313,126 @@ async fn scan(
             &state.recent,
             |progress| {
                 if let ScanProgress::HistoryWarning(message) = &progress {
-                    send(
-                        &sender,
-                        Event::HistoryWarning {
-                            message: (*message).to_owned(),
-                        },
-                    );
+                    emit(Event::HistoryWarning {
+                        message: (*message).to_owned(),
+                    });
                     return;
                 }
                 let (current, total) = match &progress {
                     ScanProgress::Skill { current, total, .. } => (Some(*current), Some(*total)),
                     _ => (None, None),
                 };
-                let mut message = Vec::new();
-                report::write_progress(&mut message, progress)
-                    .expect("writing to a vector cannot fail");
-                send(
-                    &sender,
-                    Event::Progress {
-                        message: String::from_utf8(message)
-                            .expect("progress is UTF-8")
-                            .trim_end()
-                            .to_owned(),
-                        current,
-                        total,
-                    },
-                );
+                emit(Event::Progress {
+                    message: progress_message(|output| report::write_progress(output, progress)),
+                    current,
+                    total,
+                });
             },
         );
-        let event = match result {
+        match result {
             Ok(inventory) => Event::Complete {
-                inventory: inventory.into(),
+                inventory: CompletedInventory::Repository(inventory.into()),
             },
             Err(error) => Event::Error {
                 message: error.to_string(),
             },
-        };
+        }
+    })
+}
+
+async fn scan_organization(
+    State(state): State<WebState>,
+    body: Result<Json<OrganizationRequest>, JsonRejection>,
+) -> Response {
+    let input = match body {
+        Ok(Json(input)) => input,
+        Err(rejection) => {
+            return error(
+                rejection.status(),
+                "Send a JSON object with one organization field (maximum 4 KiB).",
+            )
+        }
+    };
+    let owner = match input.organization.trim().parse::<Owner>() {
+        Ok(owner) => owner,
+        Err(message) => return error(StatusCode::BAD_REQUEST, &message),
+    };
+    let Ok(permit) = state.available.try_acquire_owned() else {
+        return busy();
+    };
+    stream_events(permit, move |emit| {
+        // Repository counters drive the progress bar; nested skill counters
+        // remain in the message text.
+        let mut current: Option<(String, usize, usize)> = None;
+        let result =
+            organization::scan_organization(&state.client, &owner, &state.cache, |progress| {
+                let message = match progress {
+                    OrganizationProgress::Scan(progress) => {
+                        let (repository, _, _) =
+                            current.as_ref().expect("repository progress comes first");
+                        format!(
+                            "{repository}: {}",
+                            progress_message(|output| report::write_progress(output, progress))
+                        )
+                    }
+                    OrganizationProgress::Repository {
+                        repository,
+                        current: index,
+                        total,
+                    } => {
+                        current = Some((repository.to_string(), index, total));
+                        progress_message(|output| {
+                            report::write_organization_progress(output, progress)
+                        })
+                    }
+                    OrganizationProgress::Listing { .. } => progress_message(|output| {
+                        report::write_organization_progress(output, progress)
+                    }),
+                };
+                emit(Event::Progress {
+                    message,
+                    current: current.as_ref().map(|(_, index, _)| *index),
+                    total: current.as_ref().map(|(_, _, total)| *total),
+                });
+            });
+        match result {
+            Ok(inventory) => Event::Complete {
+                inventory: CompletedInventory::Organization(inventory.into()),
+            },
+            Err(error) => Event::Error {
+                message: error.to_string(),
+            },
+        }
+    })
+}
+
+fn busy() -> Response {
+    error(
+        StatusCode::CONFLICT,
+        "A scan is already running. Wait for it to finish, then try again.",
+    )
+}
+
+fn progress_message(write: impl FnOnce(&mut Vec<u8>) -> io::Result<()>) -> String {
+    let mut message = Vec::new();
+    write(&mut message).expect("writing to a vector cannot fail");
+    String::from_utf8(message)
+        .expect("progress is UTF-8")
+        .trim_end()
+        .to_owned()
+}
+
+/// Run one scan on a blocking worker and stream its events. The worker keeps
+/// the permit until the scan finishes, even if the client disconnects.
+fn stream_events(
+    permit: OwnedSemaphorePermit,
+    work: impl FnOnce(&mut dyn FnMut(Event)) -> Event + Send + 'static,
+) -> Response {
+    // A bounded channel applies backpressure without retaining a scan job.
+    let (sender, receiver) = mpsc::channel::<Result<String, Infallible>>(8);
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let event = work(&mut |event| send(&sender, event));
         send(&sender, event);
     });
     (

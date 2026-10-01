@@ -28,6 +28,9 @@ mod recent;
 #[path = "cache_tests.rs"]
 mod cache;
 
+#[path = "organization_tests.rs"]
+mod organization_scan;
+
 pub(crate) struct TestDirectory(pub(crate) std::path::PathBuf);
 
 impl TestDirectory {

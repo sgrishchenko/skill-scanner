@@ -17,6 +17,14 @@ pub enum Command {
         /// OWNER/REPO or https://github.com/OWNER/REPO
         repository: String,
     },
+    /// List SKILL.md files across an organization's or user's public repositories
+    #[command(
+        after_help = "Lists the owner's public repositories, skips forks, and scans each default branch in turn.\nRepositories that cannot be scanned are reported and the exit code is 1; the rest of the report is still printed.\nVery large repositories whose file listing GitHub truncates must be scanned individually.\nAnalyses share the scan cache; SKILL_SCANNER_CACHE_DIR overrides it and an empty value disables it.\nOrganization scans do not change recent repositories.\nSet GITHUB_TOKEN for larger organizations; anonymous access allows about 60 requests per hour.\nRepository content is read without running any scripts or skill instructions."
+    )]
+    ScanOrg {
+        /// OWNER or https://github.com/OWNER (an organization or user)
+        organization: String,
+    },
     /// List or remove recently scanned repositories (no GitHub access)
     #[command(
         after_help = "Successful CLI and web scans share recent repositories across runs.\nSKILL_SCANNER_HISTORY_DIR overrides the history directory; an empty value disables it."

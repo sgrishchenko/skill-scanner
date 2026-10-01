@@ -2,8 +2,9 @@ use std::io::{self, Write};
 
 use crate::{
     aggregation,
+    organization::{OrganizationInventory, OrganizationProgress},
     recent::RecentRepository,
-    scanner::{Inventory, ScanProgress},
+    scanner::{Inventory, ScanProgress, Skill},
 };
 
 /// Prevent repository-controlled text from issuing terminal commands or changing
@@ -65,6 +66,33 @@ pub fn write_progress(mut output: impl Write, progress: ScanProgress<'_>) -> io:
     output.flush()
 }
 
+/// Indent per-repository progress below the repository being scanned.
+pub fn write_organization_progress(
+    mut output: impl Write,
+    progress: OrganizationProgress<'_>,
+) -> io::Result<()> {
+    match progress {
+        OrganizationProgress::Listing { owner, page } => {
+            writeln!(output, "Listing public repositories: {owner} (page {page})")?;
+        }
+        OrganizationProgress::Repository {
+            repository,
+            current,
+            total,
+        } => {
+            writeln!(
+                output,
+                "Scanning repository [{current}/{total}]: {repository}"
+            )?;
+        }
+        OrganizationProgress::Scan(progress) => {
+            write!(output, "  ")?;
+            return write_progress(output, progress);
+        }
+    }
+    output.flush()
+}
+
 pub fn write_recent(
     mut output: impl Write,
     entries: &[RecentRepository],
@@ -97,8 +125,75 @@ pub fn write_report(mut output: impl Write, inventory: &Inventory) -> io::Result
         Some(commit) => writeln!(output, "Commit: {commit}")?,
         None => writeln!(output, "Commit: none (empty repository; no commit to scan)")?,
     }
-    writeln!(output, "Skills found: {}", inventory.skills.len())?;
-    let aggregation = aggregation::aggregate(&inventory.skills);
+    write_skills(output, &inventory.skills)
+}
+
+pub fn write_organization_report(
+    mut output: impl Write,
+    inventory: &OrganizationInventory,
+) -> io::Result<()> {
+    let failed = inventory.failed_repositories();
+    let with_skills = inventory
+        .repositories
+        .iter()
+        .filter(|repository| repository.skill_count > 0)
+        .count();
+    writeln!(output, "Organization: {}", inventory.owner)?;
+    writeln!(
+        output,
+        "Repositories scanned: {}",
+        inventory.repositories.len()
+    )?;
+    writeln!(output, "Repositories with skills: {with_skills}")?;
+    writeln!(
+        output,
+        "Repositories without skills: {}",
+        inventory.repositories.len() - with_skills - failed
+    )?;
+    writeln!(output, "Failed repositories: {failed}")?;
+    writeln!(output, "Forks skipped: {}", inventory.skipped_forks)?;
+    if inventory.repositories.is_empty() {
+        writeln!(output, "No public repositories to scan.")?;
+    }
+    if failed > 0 {
+        writeln!(
+            output,
+            "\nIncomplete: these repositories could not be scanned, so their skills are missing:"
+        )?;
+        for repository in &inventory.repositories {
+            if let Some(error) = &repository.error {
+                writeln!(
+                    output,
+                    "  {}: {}",
+                    repository.repository,
+                    terminal_text(error)
+                )?;
+            }
+        }
+    }
+    if with_skills > 0 {
+        writeln!(output, "\nRepositories with skills:")?;
+        for repository in &inventory.repositories {
+            if repository.skill_count > 0 {
+                writeln!(
+                    output,
+                    "  {}: {} skill{} at {}",
+                    repository.repository,
+                    repository.skill_count,
+                    if repository.skill_count == 1 { "" } else { "s" },
+                    repository.commit.as_deref().unwrap_or_default()
+                )?;
+            }
+        }
+    }
+    writeln!(output)?;
+    write_skills(output, &inventory.skills)
+}
+
+/// Shared statistics, similar groups, and full inventory for one or more repositories.
+fn write_skills(mut output: impl Write, skills: &[Skill]) -> io::Result<()> {
+    writeln!(output, "Skills found: {}", skills.len())?;
+    let aggregation = aggregation::aggregate(skills);
     let stats = &aggregation.statistics;
     let percentage = |count: usize| {
         if stats.total_skills == 0 {
@@ -121,7 +216,7 @@ pub fn write_report(mut output: impl Write, inventory: &Inventory) -> io::Result
         "Skills with warnings: {}",
         stats.skills_with_warnings
     )?;
-    if inventory.skills.is_empty() {
+    if skills.is_empty() {
         writeln!(output, "No SKILL.md files found.")?;
     }
     if stats.similar_groups > 0 {
@@ -136,7 +231,7 @@ pub fn write_report(mut output: impl Write, inventory: &Inventory) -> io::Result
             .filter(|group| group.skill_indices.len() > 1)
         {
             let size = group.skill_indices.len();
-            let name = &inventory.skills[group.skill_indices[0]].name;
+            let name = &skills[group.skill_indices[0]].name;
             writeln!(
                 output,
                 "\n  {}: {size} skills ({:.1}% of scan), {} with warnings",
@@ -145,16 +240,12 @@ pub fn write_report(mut output: impl Write, inventory: &Inventory) -> io::Result
                 group.skills_with_warnings
             )?;
             for &index in &group.skill_indices {
-                writeln!(
-                    output,
-                    "    {}",
-                    terminal_text(&inventory.skills[index].path)
-                )?;
+                writeln!(output, "    {}", terminal_text(&skills[index].path))?;
             }
         }
         writeln!(output, "\nAll skills (sorted by path):")?;
     }
-    for skill in &inventory.skills {
+    for skill in skills {
         writeln!(output, "\n{}", terminal_text(&skill.name))?;
         writeln!(
             output,
@@ -167,8 +258,12 @@ pub fn write_report(mut output: impl Write, inventory: &Inventory) -> io::Result
     output.flush()
 }
 
-pub fn write_warnings(mut output: impl Write, inventory: &Inventory) -> io::Result<()> {
-    for skill in &inventory.skills {
+pub fn write_warnings(output: impl Write, inventory: &Inventory) -> io::Result<()> {
+    write_skill_warnings(output, &inventory.skills)
+}
+
+pub fn write_skill_warnings(mut output: impl Write, skills: &[Skill]) -> io::Result<()> {
+    for skill in skills {
         for warning in &skill.warnings {
             writeln!(
                 output,
