@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f6f7f2">
-    <meta name="description" content="Discover the AI skills in a public GitHub repository.">
+    <meta name="description" content="Discover the AI skills in a public GitHub repository or organization.">
     <title>Skill Scanner — Repository explorer</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/app.css">
@@ -27,19 +27,20 @@
       <section class="intro" aria-labelledby="page-title">
         <p class="eyebrow"><span></span> A LITTLE DISCOVERY. A LOT OF POSSIBILITY.</p>
         <h1 id="page-title">Your next skill is<br> already out there<span class="accent">.</span></h1>
-        <p class="intro-copy">Explore the AI skills inside any public GitHub repository.<br> Find what’s useful. Go straight to the source.</p>
+        <p class="intro-copy">Explore the AI skills inside any public GitHub repository or organization.<br> Find what’s useful. Go straight to the source.</p>
         <div class="intro-decoration" aria-hidden="true"><span>SKILL.md</span><span>name: possibilities<br>description: a new way to work</span><i>↗</i></div>
       </section>
 
       <section class="scan-panel" aria-labelledby="scan-title">
         <div class="section-label"><span class="section-number">01</span><h2 id="scan-title">Start with a repository</h2><span class="public-label">Public repositories</span></div>
         <form id="scan-form">
-          <label for="repository">GitHub repository</label>
+          <div class="result-views scan-modes" role="group" aria-label="Scan target"><button id="repository-mode" type="button" aria-pressed="true">Repository</button><button id="organization-mode" type="button" aria-pressed="false">Organization</button></div>
+          <label for="repository" id="target-label">GitHub repository</label>
           <div class="input-row">
             <div class="repository-field"><span aria-hidden="true">⌘</span><input id="repository" name="repository" type="text" placeholder="owner/repository or https://github.com/owner/repository" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="512" aria-describedby="repository-hint"></div>
             <button class="primary-button" id="scan-button" type="submit"><span id="scan-button-text">Scan repository</span><span class="button-arrow" aria-hidden="true">↗</span></button>
           </div>
-          <div class="form-bottom"><p id="repository-hint">We’ll explore the default branch and find every <code>SKILL.md</code>.</p><div class="examples"><span>Try</span><button type="button" data-repository="anthropics/skills">anthropics/skills <span aria-hidden="true">↗</span></button><button type="button" data-repository="openai/skills">openai/skills <span aria-hidden="true">↗</span></button></div></div>
+          <div class="form-bottom"><p id="repository-hint">We’ll explore the default branch and find every <code>SKILL.md</code>.</p><p id="organization-hint" hidden>We’ll scan the default branch of every public repository, skipping forks. Set <code>GITHUB_TOKEN</code> for larger organizations.</p><div class="examples" id="repository-examples"><span>Try</span><button type="button" data-repository="anthropics/skills">anthropics/skills <span aria-hidden="true">↗</span></button><button type="button" data-repository="openai/skills">openai/skills <span aria-hidden="true">↗</span></button></div><div class="examples" id="organization-examples" hidden><span>Try</span><button type="button" data-organization="anthropics">anthropics <span aria-hidden="true">↗</span></button><button type="button" data-organization="JetBrains">JetBrains <span aria-hidden="true">↗</span></button></div></div>
         </form>
         <section class="recent-section" aria-labelledby="recent-title">
           <div class="recent-heading"><h3 id="recent-title">Recent repositories</h3><button id="refresh-recent" class="text-button" type="button">Refresh list</button></div>
@@ -70,15 +71,21 @@
           <div id="initial-state" class="empty-state">
             <div class="file-illustration" aria-hidden="true"><div class="file-back"></div><div class="file-front"><span>✳</span><b>SKILL.md</b><i></i><i></i></div><span class="file-plus">+</span></div>
             <h3>A repository of possibilities</h3>
-            <p>Enter a repository above to discover its skills.<br> Names, descriptions, and source links will appear here.</p>
+            <p>Enter a repository or organization above to discover its skills.<br> Names, descriptions, and source links will appear here.</p>
             <span class="empty-note"><span class="dot"></span>Read-only discovery. Nothing is installed or run.</span>
           </div>
 
           <div id="scan-results" hidden>
             <div class="inventory-summary">
-              <div><p class="summary-label">REPOSITORY</p><h3 id="result-repository"></h3><p id="result-commit" class="commit"></p></div>
+              <div><p id="result-kind" class="summary-label">REPOSITORY</p><h3 id="result-repository"></h3><p id="result-commit" class="commit"></p></div>
               <div class="summary-numbers"><div><strong id="skill-count">0</strong><span>skills found</span></div><div><strong id="warning-count">0</strong><span>with warnings</span></div></div>
             </div>
+            <section id="organization-repositories" class="organization-repositories" aria-labelledby="repositories-title" hidden>
+              <h3 id="repositories-title">Repositories</h3>
+              <div id="incomplete-panel" class="error-panel" hidden><strong>Incomplete organization scan</strong><p id="incomplete-message"></p></div>
+              <ul id="repository-results" class="repository-results"></ul>
+              <details id="repositories-without-skills" class="repositories-without-skills"><summary id="without-skills-summary"></summary><ul id="without-skills-list"></ul></details>
+            </section>
             <section class="similarity-summary" aria-labelledby="similarity-title">
               <h3 id="similarity-title">Similarity statistics</h3>
               <dl class="similarity-statistics">
@@ -109,7 +116,7 @@
             <li><span>3</span><div><h3>Explore the source</h3><p>Every result links to the exact commit we scanned on GitHub.</p></div></li>
           </ol>
           <div class="guide-note"><span aria-hidden="true">ⓘ</span><p>Discovery is a starting point. Review a skill’s source before deciding to use it.</p></div>
-          <details class="access-help"><summary>About GitHub access</summary><p>Public repositories work without credentials, within GitHub’s API limits. For higher limits, set <code>GITHUB_TOKEN</code> before starting the app. The token stays on this machine.</p><p>One scan runs at a time. Closing this page discards its results; a running scan finishes in the background.</p></details>
+          <details class="access-help"><summary>About GitHub access</summary><p>Public repositories work without credentials, within GitHub’s API limits. For higher limits, set <code>GITHUB_TOKEN</code> before starting the app. The token stays on this machine.</p><p>Organization scans make at least two requests per repository, so set a token for larger organizations. Very large repositories must be scanned individually.</p><p>One scan runs at a time. Closing this page discards its results; a running scan finishes in the background.</p></details>
         </aside>
       </div>
     </main>

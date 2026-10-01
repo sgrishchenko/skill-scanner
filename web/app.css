@@ -824,6 +824,82 @@ progress::-moz-progress-bar {
   box-shadow: 0 1px 3px #243f2810;
 }
 
+.scan-modes {
+  margin: 0 0 16px;
+}
+
+.organization-repositories {
+  margin-top: 20px;
+}
+
+.organization-repositories h3 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.organization-repositories .error-panel {
+  margin-top: 12px;
+}
+
+.repository-results {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.repository-result {
+  padding: 10px 4px;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.repository-result strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+}
+
+.repository-result p {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.repository-result.failed p {
+  color: #8b492b;
+}
+
+.repository-result a {
+  font-family: "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  font-size: 10px;
+  text-decoration-color: #c1ccb0;
+  text-underline-offset: 3px;
+}
+
+.repositories-without-skills {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.repositories-without-skills summary {
+  cursor: pointer;
+  color: var(--green);
+}
+
+.repositories-without-skills ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;

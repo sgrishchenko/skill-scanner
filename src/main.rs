@@ -9,9 +9,10 @@ use skill_scanner::{
     cache::ScanCache,
     cli::{Cli, Command, RecentAction, StarredAction},
     github::GitHubClient,
+    organization,
     recent::RecentRepositories,
     report,
-    repository::Repository,
+    repository::{Owner, Repository},
     scanner,
     starred::StarredSkills,
     web,
@@ -36,8 +37,19 @@ fn main() -> ExitCode {
             }
         },
         Command::Serve { .. }
+        | Command::ScanOrg { .. }
         | Command::Recent { action: None }
         | Command::Starred { action: None } => None,
+    };
+    let owner = match &command {
+        Command::ScanOrg { organization } => match organization.parse::<Owner>() {
+            Ok(owner) => Some(owner),
+            Err(error) => {
+                let _ = writeln!(io::stderr().lock(), "error: {error}");
+                return ExitCode::from(2);
+            }
+        },
+        _ => None,
     };
     if let Command::Starred { action } = command {
         let starred = StarredSkills::from_environment();
@@ -124,6 +136,9 @@ fn main() -> ExitCode {
             }
         };
     }
+    if let Some(owner) = owner {
+        return scan_organization(&client, &owner);
+    }
     let result = scanner::scan_with_storage(
         &client,
         &repository.expect("scan command has a repository"),
@@ -159,4 +174,49 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn scan_organization(client: &GitHubClient, owner: &Owner) -> ExitCode {
+    let result = organization::scan_organization(
+        client,
+        owner,
+        &ScanCache::from_environment(),
+        |progress| {
+            let _ = report::write_organization_progress(&mut io::stderr().lock(), progress);
+        },
+    );
+    let inventory = match result {
+        Ok(inventory) => inventory,
+        Err(error) => {
+            let _ = writeln!(
+                io::stderr().lock(),
+                "error: {}",
+                report::terminal_text(&error.to_string())
+            );
+            return ExitCode::FAILURE;
+        }
+    };
+    let stderr = io::stderr();
+    let mut stderr = stderr.lock();
+    if let Err(error) = report::write_skill_warnings(&mut stderr, &inventory.skills) {
+        if error.kind() != io::ErrorKind::BrokenPipe {
+            return ExitCode::FAILURE;
+        }
+    }
+    if let Err(error) = report::write_organization_report(&mut io::stdout().lock(), &inventory) {
+        if error.kind() != io::ErrorKind::BrokenPipe {
+            let _ = writeln!(stderr, "error: could not write the report: {error}");
+            return ExitCode::FAILURE;
+        }
+    }
+    let failed = inventory.failed_repositories();
+    if failed > 0 {
+        let _ = writeln!(
+            stderr,
+            "error: {failed} of {} repositories could not be scanned; the organization inventory is incomplete.",
+            inventory.repositories.len()
+        );
+        return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
 }

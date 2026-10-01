@@ -16,6 +16,7 @@ fn help_and_version_succeed_without_network_or_credentials() {
     for args in [
         &["--help"][..],
         &["scan", "--help"][..],
+        &["scan-org", "--help"][..],
         &["serve", "--help"][..],
         &["recent", "--help"][..],
         &["recent", "remove", "--help"][..],
@@ -45,6 +46,10 @@ fn invalid_usage_exits_two_and_never_prints_an_inventory() {
         &["serve", "--host", "0.0.0.0"][..],
         &["recent", "remove"][..],
         &["recent", "remove", "../escape"][..],
+        &["scan-org"][..],
+        &["scan-org", "example/skills"][..],
+        &["scan-org", "https://github.com/orgs/example"][..],
+        &["scan-org", "example", "other"][..],
         &["starred", "remove"][..],
         &["starred", "remove", "a/b"][..],
         &["starred", "remove", "../escape", "SKILL.md"][..],
@@ -301,4 +306,14 @@ fn occupied_web_port_fails_with_an_actionable_error() {
     assert!(String::from_utf8(output.stderr)
         .unwrap()
         .contains("could not run the web interface"));
+}
+
+#[test]
+fn rejected_organization_inputs_are_not_echoed() {
+    let output = run(&["scan-org", "https://name:secret@github.com/example"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("expected OWNER or https://github.com/OWNER"));
+    assert!(!stderr.contains("secret"));
 }

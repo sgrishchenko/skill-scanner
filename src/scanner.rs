@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     cache::ScanCache,
-    github::{validate_sha, BlobContent, GitHubClient, Tree, TreeEntry, MAX_SKILL_BYTES},
+    github::{
+        validate_sha, BlobContent, GitHubClient, RepositoryInfo, Tree, TreeEntry, MAX_SKILL_BYTES,
+    },
     metadata::{self, Metadata, MetadataWarning},
     recent::RecentRepositories,
     repository::Repository,
@@ -80,14 +82,28 @@ pub fn scan_with_cache(
 ) -> Result<Inventory, ScanError> {
     progress(ScanProgress::Repository(repository));
     let info = client.repository(repository)?;
+    scan_snapshot(client, repository, &info, cache, true, progress)
+}
+
+/// Scan a repository whose details were already fetched, either directly or
+/// from an organization listing. Without `walk_truncated`, a truncated
+/// recursive tree fails instead of requesting every directory separately.
+pub(crate) fn scan_snapshot(
+    client: &GitHubClient,
+    repository: &Repository,
+    info: &RepositoryInfo,
+    cache: &ScanCache,
+    walk_truncated: bool,
+    mut progress: impl FnMut(ScanProgress<'_>),
+) -> Result<Inventory, ScanError> {
     if info.private {
-        return Err(ScanError(
-            "Private repositories are unsupported; choose one public GitHub repository.".to_owned(),
+        return Err(ScanError::new(
+            "Private repositories are unsupported; choose one public GitHub repository.",
         ));
     }
     if info.default_branch.is_empty() {
-        return Err(ScanError(
-            "GitHub did not identify a default branch; retry the scan.".to_owned(),
+        return Err(ScanError::new(
+            "GitHub did not identify a default branch; retry the scan.",
         ));
     }
     let mut inventory = Inventory {
@@ -103,7 +119,13 @@ pub fn scan_with_cache(
         progress(ScanProgress::Cached(&commit.sha));
         return Ok(inventory);
     }
-    let candidates = discover(client, repository, &commit.commit.tree.sha, &mut progress)?;
+    let candidates = discover(
+        client,
+        repository,
+        &commit.commit.tree.sha,
+        walk_truncated,
+        &mut progress,
+    )?;
     let total = candidates.len();
     for (index, entry) in candidates.into_iter().enumerate() {
         progress(ScanProgress::Skill {
@@ -121,11 +143,11 @@ pub fn scan_with_cache(
         } else {
             match client
                 .blob(repository, &entry.sha)
-                .map_err(|error| ScanError(format!("{}: {error}", entry.path)))?
+                .map_err(|error| error.context(&entry.path))?
             {
                 BlobContent::Bytes(bytes) => {
                     if entry.size.is_some_and(|size| size != bytes.len() as u64) {
-                        return Err(ScanError(format!("{}: GitHub returned inconsistent file sizes; the inventory is incomplete. Retry the scan.", entry.path)));
+                        return Err(ScanError::new(format!("{}: GitHub returned inconsistent file sizes; the inventory is incomplete. Retry the scan.", entry.path)));
                     }
                     metadata::parse(&bytes, fallback)
                 }
@@ -153,6 +175,7 @@ fn discover(
     client: &GitHubClient,
     repository: &Repository,
     root_sha: &str,
+    walk_truncated: bool,
     progress: &mut impl FnMut(ScanProgress<'_>),
 ) -> Result<Vec<TreeEntry>, ScanError> {
     progress(ScanProgress::DiscoveringSkills);
@@ -161,6 +184,8 @@ fn discover(
     if !recursive.truncated {
         validate_entries(&recursive.tree, true)?;
         candidates.extend(recursive.tree.into_iter().filter(is_skill));
+    } else if !walk_truncated {
+        return Err(ScanError::new("GitHub truncated this repository's file listing. Organization scans do not walk every directory of very large repositories; scan this repository individually."));
     } else {
         // A truncated recursive response cannot establish completeness. Walk
         // every directory from the pinned root, caching shared subtree objects.
@@ -168,8 +193,8 @@ fn discover(
         let mut cache = HashMap::<String, Tree>::new();
         while let Some((prefix, sha, mut ancestors)) = pending.pop() {
             if ancestors.contains(&sha) {
-                return Err(ScanError(
-                    "GitHub returned a cyclic tree; the inventory is incomplete.".to_owned(),
+                return Err(ScanError::new(
+                    "GitHub returned a cyclic tree; the inventory is incomplete.",
                 ));
             }
             ancestors.push(sha.clone());
@@ -181,7 +206,7 @@ fn discover(
             if !cache.contains_key(&sha) {
                 let tree = client.tree(repository, &sha, false)?;
                 if tree.truncated {
-                    return Err(ScanError("GitHub truncated a directory listing; the inventory is incomplete. Try a smaller repository.".to_owned()));
+                    return Err(ScanError::new("GitHub truncated a directory listing; the inventory is incomplete. Try a smaller repository."));
                 }
                 validate_entries(&tree.tree, false)?;
                 cache.insert(sha.clone(), tree);
@@ -229,7 +254,7 @@ fn validate_entries(entries: &[TreeEntry], recursive: bool) -> Result<(), ScanEr
             ("tree", "040000") | ("blob", "100644" | "100755" | "120000") | ("commit", "160000")
         );
         if !valid_path || !valid_mode || !paths.insert(entry.path.as_str()) {
-            return Err(ScanError("GitHub returned an invalid or duplicate tree entry; the inventory is incomplete. Retry the scan.".to_owned()));
+            return Err(ScanError::new("GitHub returned an invalid or duplicate tree entry; the inventory is incomplete. Retry the scan."));
         }
     }
     Ok(())

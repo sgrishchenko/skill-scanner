@@ -9,11 +9,15 @@ use reqwest::{
 };
 use serde::{de::DeserializeOwned, Deserialize};
 
-use crate::{repository::Repository, ScanError};
+use crate::{
+    repository::{Owner, Repository},
+    ScanError,
+};
 
 pub const MAX_SKILL_BYTES: u64 = 1024 * 1024;
 const MAX_API_BYTES: u64 = 32 * 1024 * 1024;
 const ATTEMPTS: usize = 3;
+pub(crate) const OWNER_PAGE_SIZE: usize = 100;
 
 pub struct GitHubClient {
     client: Client,
@@ -27,6 +31,24 @@ pub struct GitHubClient {
 pub(crate) struct RepositoryInfo {
     pub private: bool,
     pub default_branch: String,
+}
+
+/// One entry of an organization's or user's public repository listing.
+#[derive(Deserialize)]
+pub(crate) struct OwnerRepository {
+    pub name: String,
+    pub owner: Account,
+    pub private: bool,
+    pub fork: bool,
+    #[serde(default)]
+    pub disabled: bool,
+    #[serde(default)]
+    pub default_branch: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct Account {
+    pub login: String,
 }
 
 #[derive(Deserialize)]
@@ -111,7 +133,7 @@ impl GitHubClient {
         );
         if let Some(token) = token {
             let mut auth = HeaderValue::from_str(&format!("Bearer {token}")).map_err(|_| {
-                ScanError("GITHUB_TOKEN is invalid; unset it or supply a valid token.".to_owned())
+                ScanError::new("GITHUB_TOKEN is invalid; unset it or supply a valid token.")
             })?;
             auth.set_sensitive(true);
             headers.insert(header::AUTHORIZATION, auth);
@@ -133,9 +155,8 @@ impl GitHubClient {
             builder = builder.no_proxy();
         }
         let client = builder.build().map_err(|_| {
-            ScanError(
-                "Could not initialize the HTTPS client; check your system's network configuration."
-                    .to_owned(),
+            ScanError::new(
+                "Could not initialize the HTTPS client; check your system's network configuration.",
             )
         })?;
         Ok(Self {
@@ -171,12 +192,40 @@ impl GitHubClient {
         self.json(self.url(repository, &[]))
     }
 
+    /// List one page of public repositories owned by an organization or user.
+    pub(crate) fn owner_repositories(
+        &self,
+        owner: &Owner,
+        page: usize,
+    ) -> Result<Vec<OwnerRepository>, ScanError> {
+        let mut url = self.base.clone();
+        url.path_segments_mut()
+            .expect("API URL")
+            .pop_if_empty()
+            .extend(["users", owner.login.as_str(), "repos"]);
+        url.query_pairs_mut()
+            .append_pair("type", "owner")
+            .append_pair("sort", "full_name")
+            .append_pair("per_page", &OWNER_PAGE_SIZE.to_string())
+            .append_pair("page", &page.to_string());
+        let response = self.request(url, Some(StatusCode::NOT_FOUND))?;
+        if response.status == StatusCode::NOT_FOUND {
+            return Err(ScanError::new(
+                "The organization or user is inaccessible on GitHub; check the name and retry. (HTTP 404)",
+            ));
+        }
+        decode_success(response)
+    }
+
     pub(crate) fn default_commit(
         &self,
         repository: &Repository,
         branch: &str,
     ) -> Result<Option<Commit>, ScanError> {
-        let response = self.request(self.url(repository, &["commits", branch]))?;
+        let response = self.request(
+            self.url(repository, &["commits", branch]),
+            Some(StatusCode::CONFLICT),
+        )?;
         if response.status == StatusCode::CONFLICT {
             // Only GitHub's specific empty-repository response is a successful
             // empty scan. Other 409 responses must not hide a failure.
@@ -211,7 +260,7 @@ impl GitHubClient {
         }
         let tree: Tree = self.json(url)?;
         if tree.sha != sha {
-            return Err(ScanError("GitHub returned a different tree object; the inventory is incomplete. Retry the scan.".to_owned()));
+            return Err(ScanError::new("GitHub returned a different tree object; the inventory is incomplete. Retry the scan."));
         }
         Ok(tree)
     }
@@ -223,13 +272,13 @@ impl GitHubClient {
     ) -> Result<BlobContent, ScanError> {
         let blob: Blob = self.json(self.url(repository, &["git", "blobs", sha]))?;
         if blob.sha != sha {
-            return Err(ScanError("GitHub returned a different file object; the inventory is incomplete. Retry the scan.".to_owned()));
+            return Err(ScanError::new("GitHub returned a different file object; the inventory is incomplete. Retry the scan."));
         }
         if blob.size > MAX_SKILL_BYTES {
             return Ok(BlobContent::TooLarge);
         }
         if blob.encoding != "base64" {
-            return Err(ScanError("GitHub returned an unsupported file encoding; the inventory is incomplete. Retry the scan.".to_owned()));
+            return Err(ScanError::new("GitHub returned an unsupported file encoding; the inventory is incomplete. Retry the scan."));
         }
         let compact: Vec<u8> = blob
             .content
@@ -238,27 +287,27 @@ impl GitHubClient {
             .collect();
         // Limit allocation even if the API's declared file size is inconsistent.
         if compact.len() as u64 > MAX_SKILL_BYTES.div_ceil(3) * 4 {
-            return Err(ScanError("GitHub returned inconsistent file size data; the inventory is incomplete. Retry the scan.".to_owned()));
+            return Err(ScanError::new("GitHub returned inconsistent file size data; the inventory is incomplete. Retry the scan."));
         }
         let bytes = STANDARD.decode(compact).map_err(|_| {
-            ScanError(
-                "GitHub returned invalid file data; the inventory is incomplete. Retry the scan."
-                    .to_owned(),
+            ScanError::new(
+                "GitHub returned invalid file data; the inventory is incomplete. Retry the scan.",
             )
         })?;
         if bytes.len() as u64 != blob.size {
-            return Err(ScanError(
-                "GitHub returned an incomplete file; retry the scan.".to_owned(),
+            return Err(ScanError::new(
+                "GitHub returned an incomplete file; retry the scan.",
             ));
         }
         Ok(BlobContent::Bytes(bytes))
     }
 
     fn json<T: DeserializeOwned>(&self, url: Url) -> Result<T, ScanError> {
-        decode_success(self.request(url)?)
+        decode_success(self.request(url, None)?)
     }
 
-    fn request(&self, url: Url) -> Result<ApiResponse, ScanError> {
+    /// Return error responses with the `inspect` status for the caller to interpret.
+    fn request(&self, url: Url, inspect: Option<StatusCode>) -> Result<ApiResponse, ScanError> {
         for attempt in 0..ATTEMPTS {
             // A per-request timeout also applies to the underlying async body.
             // The blocking client's timeout alone restarts for each read.
@@ -276,7 +325,7 @@ impl GitHubClient {
                         thread::sleep(self.retry_backoff * (1 << attempt));
                         continue;
                     }
-                    return Err(ScanError("Could not reach GitHub or the request timed out; check your connection and retry the scan.".to_owned()));
+                    return Err(ScanError::service("Could not reach GitHub or the request timed out; check your connection and retry the scan."));
                 }
             };
             let status = response.status();
@@ -290,9 +339,8 @@ impl GitHubClient {
                         .and_then(|value| value.parse::<u64>().ok())
                     {
                         Some(seconds) if seconds <= 5 => Duration::from_secs(seconds),
-                        _ => return Err(ScanError(
-                            "GitHub asked for a longer retry delay; wait and retry the scan later."
-                                .to_owned(),
+                        _ => return Err(ScanError::service(
+                            "GitHub asked for a longer retry delay; wait and retry the scan later.",
                         )),
                     }
                 } else {
@@ -302,9 +350,9 @@ impl GitHubClient {
                 thread::sleep(delay);
                 continue;
             }
-            // Do not parse or print arbitrary server error text. The 409 body is
+            // Do not parse or print arbitrary server error text. A 409 body is
             // needed solely to distinguish an empty repository from failure.
-            if !status.is_success() && status != StatusCode::CONFLICT {
+            if !status.is_success() && Some(status) != inspect {
                 return Err(http_error(status));
             }
             if response
@@ -323,7 +371,7 @@ impl GitHubClient {
                     thread::sleep(self.retry_backoff * (1 << attempt));
                     continue;
                 }
-                return Err(ScanError("GitHub's response was interrupted or timed out; the inventory is incomplete. Check your connection and retry the scan.".to_owned()));
+                return Err(ScanError::service("GitHub's response was interrupted or timed out; the inventory is incomplete. Check your connection and retry the scan."));
             }
             if body.len() as u64 > self.max_api_bytes {
                 return Err(response_too_large());
@@ -336,9 +384,8 @@ impl GitHubClient {
 
 pub(crate) fn validate_sha(sha: &str) -> Result<(), ScanError> {
     if !matches!(sha.len(), 40 | 64) || !sha.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(ScanError(
-            "GitHub returned an invalid object ID; the inventory is incomplete. Retry the scan."
-                .to_owned(),
+        return Err(ScanError::new(
+            "GitHub returned an invalid object ID; the inventory is incomplete. Retry the scan.",
         ));
     }
     Ok(())
@@ -348,13 +395,12 @@ fn decode_success<T: DeserializeOwned>(response: ApiResponse) -> Result<T, ScanE
     if !response.status.is_success() {
         return Err(http_error(response.status));
     }
-    serde_json::from_slice(&response.body).map_err(|_| {
-        ScanError("GitHub returned invalid or incomplete JSON; retry the scan.".to_owned())
-    })
+    serde_json::from_slice(&response.body)
+        .map_err(|_| ScanError::new("GitHub returned invalid or incomplete JSON; retry the scan."))
 }
 
 fn response_too_large() -> ScanError {
-    ScanError("GitHub's API response exceeds the 32 MiB limit; the inventory is incomplete. Try a smaller repository.".to_owned())
+    ScanError::new("GitHub's API response exceeds the 32 MiB limit; the inventory is incomplete. Try a smaller repository.")
 }
 
 fn http_error(status: StatusCode) -> ScanError {
@@ -366,5 +412,10 @@ fn http_error(status: StatusCode) -> ScanError {
         300..=399 => "GitHub redirected outside the API origin or too many times; retry with the repository's current GitHub URL.",
         _ => "GitHub could not complete the request; verify the public repository URL and retry the scan.",
     };
-    ScanError(format!("{message} (HTTP {})", status.as_u16()))
+    let message = format!("{message} (HTTP {})", status.as_u16());
+    if matches!(status.as_u16(), 401 | 403 | 429) {
+        ScanError::service(message)
+    } else {
+        ScanError::new(message)
+    }
 }
