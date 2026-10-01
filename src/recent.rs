@@ -3,18 +3,23 @@
 use std::{
     env,
     ffi::OsString,
-    fs::{self, File},
-    io::{self, Read},
-    path::{Path, PathBuf},
+    io,
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
 
-use crate::{repository::Repository, scanner::Inventory, storage::atomic_write};
+use crate::{
+    repository::Repository,
+    scanner::Inventory,
+    storage::{atomic_write, read_entries, remove_entry, repository_stem, state_root},
+};
 
 const FORMAT_VERSION: u32 = 1;
 const MAX_ENTRY_BYTES: u64 = 4096;
+/// The latest time the browser can format as a JavaScript Date.
+pub(crate) const MAX_JAVASCRIPT_TIME: u64 = 8_640_000_000_000_000;
 
 #[derive(Clone, Debug)]
 pub struct RecentRepositories {
@@ -56,21 +61,7 @@ impl RecentRepositories {
     }
 
     fn filename(repository: &Repository) -> io::Result<String> {
-        // Validate even when Repository was constructed directly. A flat,
-        // prefixed filename is safe on all supported filesystems. Append a URL
-        // suffix so parsing preserves repository names that themselves end in .git.
-        let parsed = format!("{repository}.git").parse::<Repository>();
-        if parsed.as_ref() != Ok(repository) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid repository.",
-            ));
-        }
-        Ok(format!(
-            "owner-{}_repo-{}.json",
-            repository.owner.to_ascii_lowercase(),
-            repository.name.to_ascii_lowercase()
-        ))
+        Ok(format!("{}.json", repository_stem(repository)?))
     }
 
     pub fn record(&self, inventory: &Inventory) -> io::Result<()> {
@@ -102,33 +93,8 @@ impl RecentRepositories {
         let Some(root) = &self.root else {
             return Ok(Vec::new());
         };
-        let files = match fs::read_dir(root) {
-            Ok(files) => files,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(error) => return Err(error),
-        };
         let mut entries = Vec::new();
-        for file in files {
-            let file = file?;
-            let path = file.path();
-            if path.extension().is_none_or(|extension| extension != "json")
-                || !file.file_type()?.is_file()
-            {
-                continue;
-            }
-            let file = match open_entry(&path) {
-                Ok(file) => file,
-                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(error),
-            };
-            if file.metadata()?.len() > MAX_ENTRY_BYTES {
-                continue;
-            }
-            let mut bytes = Vec::new();
-            file.take(MAX_ENTRY_BYTES + 1).read_to_end(&mut bytes)?;
-            if bytes.len() as u64 > MAX_ENTRY_BYTES {
-                continue;
-            }
+        for (filename, bytes) in read_entries(root, MAX_ENTRY_BYTES)? {
             let Ok(entry) = serde_json::from_slice::<Entry>(&bytes) else {
                 continue;
             };
@@ -138,10 +104,8 @@ impl RecentRepositories {
             };
             if entry.format_version != FORMAT_VERSION
                 || repository.to_string() != entry.recent.repository
-                || Self::filename(&repository).ok().as_deref()
-                    != path.file_name().and_then(|name| name.to_str())
-                // The browser must be able to format this as a JavaScript Date.
-                || entry.recent.scanned_at > 8_640_000_000_000_000
+                || Self::filename(&repository).ok().as_deref() != Some(filename.as_str())
+                || entry.recent.scanned_at > MAX_JAVASCRIPT_TIME
             {
                 continue;
             }
@@ -162,76 +126,16 @@ impl RecentRepositories {
         let Some(root) = &self.root else {
             return Ok(());
         };
-        match fs::remove_file(root.join(Self::filename(repository)?)) {
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                // Windows also reports NotFound when root is a regular file.
-                // Only a missing entry or history directory is a successful no-op.
-                match fs::metadata(root) {
-                    Ok(metadata) if !metadata.is_dir() => Err(io::Error::new(
-                        io::ErrorKind::NotADirectory,
-                        "Recent repository history path is not a directory.",
-                    )),
-                    Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
-                    _ => Ok(()),
-                }
-            }
-            result => result,
-        }
-    }
-}
-
-fn open_entry(path: &Path) -> io::Result<File> {
-    #[cfg(windows)]
-    {
-        retry_windows_entry_open(|| File::open(path), std::thread::sleep)
-    }
-    #[cfg(not(windows))]
-    {
-        File::open(path)
-    }
-}
-
-#[cfg(any(windows, test))]
-fn retry_windows_entry_open<T>(
-    mut open: impl FnMut() -> io::Result<T>,
-    mut wait: impl FnMut(std::time::Duration),
-) -> io::Result<T> {
-    // Replacing an entry can briefly leave the destination pending deletion
-    // on Windows. CreateFile may report ACCESS_DENIED, SHARING_VIOLATION, or
-    // DELETE_PENDING during that interval. Persistent errors still reach callers.
-    let mut delays = [5, 10, 20].into_iter();
-    loop {
-        match open() {
-            Err(error) if matches!(error.raw_os_error(), Some(5 | 32 | 303)) => {
-                let Some(delay) = delays.next() else {
-                    return Err(error);
-                };
-                wait(std::time::Duration::from_millis(delay));
-            }
-            result => return result,
-        }
+        remove_entry(
+            root,
+            &Self::filename(repository)?,
+            "Recent repository history",
+        )
     }
 }
 
 fn history_root(get: impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
-    if let Some(path) = get("SKILL_SCANNER_HISTORY_DIR") {
-        return (!path.is_empty()).then(|| PathBuf::from(path));
-    }
-    let nonempty_path = |name| {
-        get(name)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-    };
-    let base = if cfg!(target_os = "windows") {
-        nonempty_path("LOCALAPPDATA")
-    } else if cfg!(target_os = "macos") {
-        nonempty_path("HOME").map(|home| home.join("Library/Application Support"))
-    } else {
-        nonempty_path("XDG_STATE_HOME")
-            .filter(|path| path.is_absolute())
-            .or_else(|| nonempty_path("HOME").map(|home| home.join(".local/state")))
-    };
-    base.map(|path| path.join("skill-scanner/recent"))
+    state_root(get, "SKILL_SCANNER_HISTORY_DIR", "recent")
 }
 
 #[cfg(test)]

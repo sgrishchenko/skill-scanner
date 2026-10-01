@@ -6,6 +6,11 @@ let busy = false;
 let groupedView = true;
 let recentRequest = 0;
 const removingRepositories = new Set();
+// Starred skills by case-insensitive repository and exact path.
+let starred = new Map();
+let starredEnabled = true;
+let starredRequest = 0;
+const pendingStars = new Set();
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -121,6 +126,120 @@ async function removeRecent(repository) {
   }
 }
 
+function starKey(repository, path) {
+  return `${repository.toLowerCase()}\n${path}`;
+}
+
+function connectionMessage(error) {
+  return error instanceof TypeError ? "Could not connect to the local server. Retry when it is running." : error.message;
+}
+
+function showStarredError(message) {
+  $("starred-error").textContent = message;
+  $("starred-error").hidden = false;
+}
+
+function updateStarButtons() {
+  document.querySelectorAll("[data-star-path]").forEach((button) => {
+    const key = starKey(inventory.repository, button.dataset.starPath);
+    const pressed = starred.has(key);
+    button.setAttribute("aria-pressed", String(pressed));
+    // Disabling the button would drop keyboard focus; setStar ignores repeats.
+    button.setAttribute("aria-disabled", String(pendingStars.has(key)));
+    button.replaceChildren(node("span", "star-icon", pressed ? "★" : "☆"), pressed ? "Starred" : "Star");
+    button.firstChild.setAttribute("aria-hidden", "true");
+  });
+  document.querySelectorAll("[data-unstar-key]").forEach((button) => {
+    button.disabled = pendingStars.has(button.dataset.unstarKey);
+  });
+}
+
+// Keep keyboard focus nearby when a filter change removes the focused card.
+function rerenderSkills(fallbackFocus) {
+  const focused = document.activeElement;
+  const inResults = $("skill-list").contains(focused);
+  renderSkills();
+  if (inResults && !focused.isConnected) fallbackFocus.focus();
+}
+
+async function refreshStarred() {
+  const request = ++starredRequest;
+  try {
+    const response = await fetch("/api/starred", { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not load starred skills. Refresh the page to try again.");
+    const result = await response.json();
+    if (request !== starredRequest) return;
+    const previous = [...starred.keys()].sort().join("\0");
+    starred = new Map(result.skills.map((skill) => [starKey(skill.repository, skill.path), skill]));
+    const list = document.createDocumentFragment();
+    for (const [key, skill] of starred) {
+      const row = node("li", "recent-row starred-row");
+      const details = node("div", "recent-details");
+      details.append(node("p", "starred-name", skill.name), node("p", "recent-hint", `${skill.repository} · ${skill.path}`));
+      const actions = node("div", "starred-actions");
+      const link = externalLink("Source ↗", skill.link, "text-button");
+      link.setAttribute("aria-label", `View ${skill.path} in ${skill.repository} on GitHub (opens in a new tab)`);
+      const unstar = node("button", "text-button", "Unstar");
+      unstar.type = "button";
+      unstar.dataset.unstarKey = key;
+      unstar.setAttribute("aria-label", `Unstar ${skill.path} in ${skill.repository}`);
+      unstar.addEventListener("click", () => setStar(skill, skill.repository, null, false));
+      actions.append(link, unstar);
+      row.append(details, actions);
+      list.append(row);
+    }
+    $("starred-list").replaceChildren(list);
+    $("starred-status").textContent = !result.enabled
+      ? "Starred skills are disabled on this server."
+      : result.skills.length ? "Most recently starred first." : "No starred skills yet.";
+    const changed = starredEnabled !== result.enabled ||
+      ($("starred-only").checked && previous !== [...starred.keys()].sort().join("\0"));
+    starredEnabled = result.enabled;
+    $("starred-filter").hidden = !starredEnabled;
+    if (!starredEnabled) $("starred-only").checked = false;
+    if (changed) rerenderSkills($("starred-only"));
+    else if (inventory) updateStarButtons();
+    return true;
+  } catch (error) {
+    if (request !== starredRequest) return;
+    $("starred-status").textContent = "Starred skills are unavailable.";
+    showStarredError(connectionMessage(error));
+  }
+}
+
+async function setStar(skill, repository, commit, adding) {
+  const key = starKey(repository, skill.path);
+  if (pendingStars.has(key)) return;
+  const fromList = $("starred-list").contains(document.activeElement);
+  pendingStars.add(key);
+  if (inventory) updateStarButtons();
+  $("starred-error").hidden = true;
+  try {
+    const response = await fetch(adding ? "/api/starred/add" : "/api/starred/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Skill-Scanner": "1" },
+      // The server keeps at most 200 characters of a name.
+      body: JSON.stringify(adding
+        ? { repository, path: skill.path, name: Array.from(skill.name).slice(0, 200).join(""), commit }
+        : { repository, path: skill.path }),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || `Could not ${adding ? "star" : "unstar"} the skill. Try again.`);
+    }
+    if (await refreshStarred()) {
+      $("starred-status").textContent = `${adding ? "Starred" : "Unstarred"} ${skill.name}.`;
+    }
+  } catch (error) {
+    showStarredError(connectionMessage(error));
+  } finally {
+    pendingStars.delete(key);
+    if (inventory) updateStarButtons();
+    if (fromList && !$("starred-list").contains(document.activeElement)) $("starred-title").focus();
+  }
+}
+
 function showError(message) {
   inventory = null;
   $("scan-results").hidden = true;
@@ -133,7 +252,19 @@ function showError(message) {
 
 function skillCard(skill, heading = "h3") {
   const card = node("article", "skill-card");
-  card.append(node(heading, "", skill.name));
+  const title = node("div", "skill-heading");
+  title.append(node(heading, "", skill.name));
+  if (starredEnabled) {
+    const star = node("button", "star-button");
+    star.type = "button";
+    star.dataset.starPath = skill.path;
+    star.setAttribute("aria-label", `Star ${skill.path}`);
+    star.addEventListener("click", () => {
+      setStar(skill, inventory.repository, inventory.commit, !starred.has(starKey(inventory.repository, skill.path)));
+    });
+    title.append(star);
+  }
+  card.append(title);
   card.append(node("p", "skill-description", skill.description || "No description available."));
   card.append(node("code", "skill-path", skill.path));
   const link = externalLink("View on GitHub ↗", skill.link, "skill-link");
@@ -193,6 +324,7 @@ function renderSkills() {
   const query = $("search").value.trim().toLocaleLowerCase();
   const warningsOnly = $("warnings-only").checked;
   const similarOnly = $("similar-only").checked;
+  const starredOnly = starredEnabled && $("starred-only").checked;
   const groups = inventory.aggregation.groups;
   const visible = new Set();
   const matchingGroups = [];
@@ -201,6 +333,7 @@ function renderSkills() {
     const indices = group.skill_indices.filter((index) => {
       const skill = inventory.skills[index];
       return (!warningsOnly || skill.warnings.length > 0) &&
+        (!starredOnly || starred.has(starKey(inventory.repository, skill.path))) &&
         [skill.name, skill.description, skill.path].some((text) => text.toLocaleLowerCase().includes(query));
     });
     if (indices.length) {
@@ -210,12 +343,13 @@ function renderSkills() {
   }
   const cards = document.createDocumentFragment();
   if (groupedView) {
-    matchingGroups.forEach(({ group, indices }) => cards.append(groupCard(group, indices, Boolean(query || warningsOnly))));
+    matchingGroups.forEach(({ group, indices }) => cards.append(groupCard(group, indices, Boolean(query || warningsOnly || starredOnly))));
   } else {
     inventory.skills.forEach((skill, index) => { if (visible.has(index)) cards.append(skillCard(skill)); });
   }
   $("skill-list").classList.toggle("grouped", groupedView);
   $("skill-list").replaceChildren(cards);
+  updateStarButtons();
   $("result-count").textContent = `Showing ${visible.size} of ${inventory.skills.length} skills` + (groupedView
     ? ` in ${matchingGroups.length} of ${groups.length} groups (including standalone skills) · largest first`
     : " · sorted by path");
@@ -322,6 +456,7 @@ $("scan-form").addEventListener("submit", async (event) => {
   $("search").value = "";
   $("warnings-only").checked = false;
   $("similar-only").checked = false;
+  $("starred-only").checked = false;
   setView(true);
   $("results-status").textContent = "Scanning repository…";
   updateProgress({ message: "Connecting to GitHub…" });
@@ -359,12 +494,14 @@ document.querySelectorAll("[data-repository]").forEach((button) => {
 $("search").addEventListener("input", renderSkills);
 $("warnings-only").addEventListener("change", renderSkills);
 $("similar-only").addEventListener("change", renderSkills);
+$("starred-only").addEventListener("change", renderSkills);
 $("grouped-view").addEventListener("click", () => setView(true));
 $("all-view").addEventListener("click", () => setView(false));
 $("clear-filters").addEventListener("click", () => {
   $("search").value = "";
   $("warnings-only").checked = false;
   $("similar-only").checked = false;
+  $("starred-only").checked = false;
   renderSkills();
   $("search").focus();
 });
@@ -373,5 +510,9 @@ $("refresh-recent").addEventListener("click", () => {
   $("recent-error").hidden = true;
   refreshRecent();
 });
-window.addEventListener("focus", () => { if (!busy) refreshRecent(); });
+window.addEventListener("focus", () => {
+  if (!busy) refreshRecent();
+  refreshStarred();
+});
 refreshRecent();
+refreshStarred();

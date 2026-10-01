@@ -32,6 +32,22 @@ fn with_web_storage(
     recent: crate::recent::RecentRepositories,
     test: impl FnOnce(Router, &tokio::runtime::Runtime),
 ) {
+    with_web_stores(
+        replies,
+        cache,
+        recent,
+        crate::starred::StarredSkills::disabled(),
+        test,
+    );
+}
+
+fn with_web_stores(
+    replies: Vec<Reply>,
+    cache: crate::cache::ScanCache,
+    recent: crate::recent::RecentRepositories,
+    starred: crate::starred::StarredSkills,
+    test: impl FnOnce(Router, &tokio::runtime::Runtime),
+) {
     let server = Server::start(replies);
     // The blocking reqwest client must be created and dropped outside Tokio.
     let client = Arc::new(server.client());
@@ -40,7 +56,7 @@ fn with_web_storage(
         .build()
         .unwrap();
     test(
-        crate::web::router(client.clone(), 3000, cache, recent),
+        crate::web::router(client.clone(), 3000, cache, recent, starred),
         &runtime,
     );
     drop(runtime);
@@ -166,6 +182,7 @@ fn default_http_port_accepts_the_hosts_and_origins_browsers_send() {
             80,
             crate::cache::ScanCache::disabled(),
             crate::recent::RecentRepositories::disabled(),
+            crate::starred::StarredSkills::disabled(),
         );
         for host in ["127.0.0.1", "localhost"] {
             let mut request = request("GET", "/", "");
@@ -500,6 +517,7 @@ fn cli_and_web_share_commit_validated_analysis_across_cache_instances() {
             3000,
             ScanCache::new(directory.0.clone()),
             crate::recent::RecentRepositories::disabled(),
+            crate::starred::StarredSkills::disabled(),
         );
         let cached = events(app.clone().oneshot(scan_request()).await.unwrap()).await;
         assert_eq!(cached.len(), 4);
@@ -722,4 +740,283 @@ fn unavailable_history_returns_errors_and_a_warning_without_losing_scan_results(
             });
         },
     );
+}
+
+async fn starred_list(app: &Router) -> Value {
+    let response = app
+        .clone()
+        .oneshot(request("GET", "/api/starred", ""))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap()).unwrap()
+}
+
+async fn status(app: &Router, method: &str, path: &str, body: &str) -> StatusCode {
+    app.clone()
+        .oneshot(request(method, path, body))
+        .await
+        .unwrap()
+        .status()
+}
+
+#[test]
+fn starred_api_persists_stars_across_servers_and_the_library() {
+    use crate::starred::StarredSkills;
+    let directory = TestDirectory::new();
+    let star = json!({
+        "repository": "https://github.com/Example/Skills",
+        "path": "skills/review/SKILL.md",
+        "name": "review",
+        "commit": COMMIT,
+    })
+    .to_string();
+    with_web_stores(
+        vec![],
+        crate::cache::ScanCache::disabled(),
+        crate::recent::RecentRepositories::disabled(),
+        StarredSkills::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                assert_eq!(
+                    starred_list(&app).await,
+                    json!({"enabled": true, "skills": []})
+                );
+                for _ in 0..2 {
+                    assert_eq!(
+                        status(&app, "POST", "/api/starred/add", &star).await,
+                        StatusCode::NO_CONTENT
+                    );
+                }
+                let list = starred_list(&app).await;
+                assert_eq!(list["skills"].as_array().unwrap().len(), 1);
+                let skill = &list["skills"][0];
+                assert_eq!(skill["repository"], "Example/Skills");
+                assert_eq!(skill["path"], "skills/review/SKILL.md");
+                assert_eq!(skill["name"], "review");
+                assert_eq!(skill["commit"], COMMIT);
+                assert_eq!(
+                    skill["link"],
+                    format!(
+                        "https://github.com/Example/Skills/blob/{COMMIT}/skills/review/SKILL.md"
+                    )
+                );
+                assert!(skill["starred_at"].as_u64().unwrap() > 0);
+            });
+        },
+    );
+    // A new server and the CLI's store instance see the same disk state.
+    assert_eq!(
+        StarredSkills::new(directory.0.clone()).list().unwrap()[0].name,
+        "review"
+    );
+    with_web_stores(
+        vec![],
+        crate::cache::ScanCache::disabled(),
+        crate::recent::RecentRepositories::disabled(),
+        StarredSkills::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                assert_eq!(starred_list(&app).await["skills"][0]["name"], "review");
+                for _ in 0..2 {
+                    assert_eq!(
+                        status(
+                            &app,
+                            "POST",
+                            "/api/starred/remove",
+                            r#"{"repository":"example/skills","path":"skills/review/SKILL.md"}"#,
+                        )
+                        .await,
+                        StatusCode::NO_CONTENT
+                    );
+                }
+                assert_eq!(starred_list(&app).await["skills"], json!([]));
+            });
+        },
+    );
+    assert!(StarredSkills::new(directory.0.clone())
+        .list()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn starred_routes_validate_input_and_have_the_same_browser_protections_as_scan() {
+    let directory = TestDirectory::new();
+    with_web_stores(
+        vec![],
+        crate::cache::ScanCache::disabled(),
+        crate::recent::RecentRepositories::disabled(),
+        crate::starred::StarredSkills::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                let valid = json!({
+                    "repository": "example/skills",
+                    "path": "SKILL.md",
+                    "name": "skills",
+                    "commit": COMMIT,
+                });
+                let with = |field: &str, value: Value| {
+                    let mut body = valid.clone();
+                    body[field] = value;
+                    body.to_string()
+                };
+                let mut missing_header = request("POST", "/api/starred/add", &valid.to_string());
+                missing_header.headers_mut().remove("x-skill-scanner");
+                let mut foreign = request("POST", "/api/starred/remove", &valid.to_string());
+                foreign
+                    .headers_mut()
+                    .insert("origin", "https://foreign.example".parse().unwrap());
+                let mut foreign_host = request("GET", "/api/starred", "");
+                foreign_host
+                    .headers_mut()
+                    .insert("host", "foreign.example:3000".parse().unwrap());
+                for request in [missing_header, foreign, foreign_host] {
+                    assert_eq!(
+                        app.clone().oneshot(request).await.unwrap().status(),
+                        StatusCode::FORBIDDEN
+                    );
+                }
+                for (path, body, status) in [
+                    (
+                        "/api/starred/add",
+                        with("repository", json!("https://user:secret@github.com/a/b")),
+                        StatusCode::BAD_REQUEST,
+                    ),
+                    (
+                        "/api/starred/add",
+                        with("path", json!("../SKILL.md")),
+                        StatusCode::BAD_REQUEST,
+                    ),
+                    (
+                        "/api/starred/add",
+                        with("path", json!("README.md")),
+                        StatusCode::BAD_REQUEST,
+                    ),
+                    (
+                        "/api/starred/add",
+                        with("commit", json!("main")),
+                        StatusCode::BAD_REQUEST,
+                    ),
+                    (
+                        "/api/starred/add",
+                        with("name", json!("")),
+                        StatusCode::BAD_REQUEST,
+                    ),
+                    (
+                        "/api/starred/add",
+                        with("unknown", json!(true)),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                    ),
+                    (
+                        "/api/starred/add",
+                        r#"{"repository":"a/b","path":"SKILL.md"}"#.into(),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                    ),
+                    ("/api/starred/add", "broken".into(), StatusCode::BAD_REQUEST),
+                    (
+                        "/api/starred/remove",
+                        r#"{"repository":"a/b","path":"x//SKILL.md"}"#.into(),
+                        StatusCode::BAD_REQUEST,
+                    ),
+                    (
+                        "/api/starred/remove",
+                        valid.to_string(),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                    ),
+                    (
+                        "/api/starred/remove",
+                        r#"{"repository":"a/b"}"#.into(),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                    ),
+                ] {
+                    let response = app
+                        .clone()
+                        .oneshot(request("POST", path, &body))
+                        .await
+                        .unwrap();
+                    assert_eq!(response.status(), status, "{path} {body}");
+                    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+                    assert!(!std::str::from_utf8(&bytes).unwrap().contains("secret"));
+                }
+                assert_eq!(
+                    status(&app, "POST", "/api/starred/add", &"x".repeat(4097)).await,
+                    StatusCode::PAYLOAD_TOO_LARGE
+                );
+                let mut missing_content_type =
+                    request("POST", "/api/starred/add", &valid.to_string());
+                missing_content_type.headers_mut().remove("content-type");
+                assert_eq!(
+                    app.clone()
+                        .oneshot(missing_content_type)
+                        .await
+                        .unwrap()
+                        .status(),
+                    StatusCode::UNSUPPORTED_MEDIA_TYPE
+                );
+                assert_eq!(
+                    status(&app, "GET", "/api/starred/add", "").await,
+                    StatusCode::METHOD_NOT_ALLOWED
+                );
+                assert_eq!(starred_list(&app).await["skills"], json!([]));
+            });
+        },
+    );
+    assert_eq!(std::fs::read_dir(&directory.0).unwrap().count(), 0);
+}
+
+#[test]
+fn disabled_and_unavailable_starred_skills_are_reported_without_affecting_scans() {
+    let star = json!({
+        "repository": "example/skills",
+        "path": "SKILL.md",
+        "name": "skills",
+        "commit": COMMIT,
+    })
+    .to_string();
+    let unstar = r#"{"repository":"example/skills","path":"SKILL.md"}"#;
+    with_web(vec![], |app, runtime| {
+        runtime.block_on(async {
+            assert_eq!(
+                starred_list(&app).await,
+                json!({"enabled": false, "skills": []})
+            );
+            assert_eq!(
+                status(&app, "POST", "/api/starred/add", &star).await,
+                StatusCode::CONFLICT
+            );
+            assert_eq!(
+                status(&app, "POST", "/api/starred/remove", unstar).await,
+                StatusCode::NO_CONTENT
+            );
+        });
+    });
+    let directory = TestDirectory::new();
+    let path = directory.0.join("file");
+    std::fs::write(&path, "not a directory").unwrap();
+    let mut replies = snapshot();
+    replies.push(tree(ROOT, true, false, vec![]));
+    with_web_stores(
+        replies,
+        crate::cache::ScanCache::disabled(),
+        crate::recent::RecentRepositories::disabled(),
+        crate::starred::StarredSkills::new(path.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                for (method, route, body) in [
+                    ("GET", "/api/starred", ""),
+                    ("POST", "/api/starred/add", star.as_str()),
+                    ("POST", "/api/starred/remove", unstar),
+                ] {
+                    assert_eq!(
+                        status(&app, method, route, body).await,
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    );
+                }
+                let events = events(app.oneshot(scan_request()).await.unwrap()).await;
+                assert_eq!(events.last().unwrap()["type"], "complete");
+            });
+        },
+    );
+    assert_eq!(std::fs::read_to_string(path).unwrap(), "not a directory");
 }
