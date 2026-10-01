@@ -1,12 +1,14 @@
 # Skill Scanner
 
 A Rust application with a CLI and local web interface that discovers AI skills in
-**one public GitHub repository**. A skill is any directory containing a regular file named exactly
+**one public GitHub repository**, or across every public repository of an
+organization or user. A skill is any directory containing a regular file named exactly
 `SKILL.md`, including the repository root and hidden directories.
 
 ```console
 skill-scanner scan OWNER/REPO
 skill-scanner scan https://github.com/OWNER/REPO
+skill-scanner scan-org OWNER
 skill-scanner serve
 skill-scanner recent
 skill-scanner recent remove OWNER/REPO
@@ -89,6 +91,32 @@ Results stay in page memory and disappear on reload. Closing a page lets its
 current scan finish in the background before another scan can start. Complete
 analyses are cached on disk; another submission checks the current commit before
 reusing them.
+
+## Organization scans
+
+Scan every public repository of an organization or user, such as JetBrains:
+
+```sh
+GITHUB_TOKEN=... skill-scanner scan-org JetBrains
+skill-scanner scan-org https://github.com/JetBrains
+```
+
+In the web interface, choose **Organization** above the scan field. The scanner
+lists the owner's public repositories, skips forks (scan an upstream repository
+directly), and scans each default branch in turn with the shared analysis
+cache. Results combine every repository: skill paths start with
+`owner/repository/`, similar skills are grouped across repositories, and a
+repository summary lists failures, repositories with skills, and those without.
+
+Each repository needs at least two API requests, so set `GITHUB_TOKEN` for any
+but the smallest organizations; anonymous access allows about 60 requests per
+hour. A rate limit, rejected token, or connection failure stops the scan with
+no results. A problem in one repository, such as a very large repository whose
+file listing GitHub truncates, is reported for that repository while the others
+complete; scan it individually with `skill-scanner scan`. The CLI still prints
+the report but exits 1 when any repository failed, and the web interface marks
+the results incomplete. Organization scans do not change recent repositories.
+See the [organization scan spec](spec/features/organization-scan.md).
 
 ## Recent repositories
 
@@ -276,9 +304,10 @@ failures produce actionable errors. Skill files over 1 MiB remain listed with
 metadata warnings; API responses over 32 MiB fail the scan.
 
 The input accepts `owner/repo` or an HTTPS `github.com` repository URL with an
-optional `.git` suffix or trailing slash. Branch/file URLs, local repositories,
-multiple repositories, installation, execution, and CLI JSON export are outside
-this version's scope.
+optional `.git` suffix or trailing slash; `scan-org` accepts `OWNER` or
+`https://github.com/OWNER`. Branch/file URLs, local repositories, arbitrary
+repository lists, installation, execution, and CLI JSON export are outside this
+version's scope.
 
 ## Development
 
@@ -294,11 +323,11 @@ or tokens. Keep `Cargo.lock` checked in; it includes a `yoke-derive` version
 compatible with Rust 1.84 (0.8.3 incorrectly uses a newer standard-library API).
 
 Modules separate argument parsing, repository input, GitHub transport, discovery,
-analysis caching, recent repositories, starred skills, metadata, terminal rendering, and the web
-server. Browser assets live in `web/`.
+organization scans, analysis caching, recent repositories, starred skills,
+metadata, terminal rendering, and the web server. Browser assets live in `web/`.
 The optional [browser E2E suite](tests/e2e/README.md) uses pinned Playwright
-tooling and screenshot baselines to reproduce the recent repositories and
-starred skills demos.
+tooling and screenshot baselines to reproduce the recent repositories, starred
+skills, and organization scan demos.
 It runs in CI and uses mocked scan responses with isolated local storage.
 See the [feature specification index](spec/README.md) for behavior and acceptance
 checks, and [implementation decisions](spec/implementation.md) for architecture

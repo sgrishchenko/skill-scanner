@@ -27,6 +27,20 @@ Resolve the default branch once, then scan tree/blob object IDs as defined by
 the [metadata rules](features/skill-metadata.md). Both interfaces use the same
 scanner and progress events.
 
+## Organization scans
+
+Keep owner listing, per-repository outcomes, and combined inventories in
+`organization`. It calls the scanner's shared snapshot step with repository
+details from the listing, so discovery, metadata, and caching stay identical to
+single-repository scans; only the truncated-tree directory walk is disabled.
+`ScanError` marks credential, rate-limit, retry-delay, and connection failures
+as service failures, which stop an
+[organization scan](features/organization-scan.md); other errors are recorded
+for the affected repository. Repositories are scanned sequentially on the same
+blocking client. The CLI and web server render the same
+`OrganizationInventory`, and the web route reuses the scan worker, bounded
+event channel, and semaphore.
+
 ## Persistent analysis cache
 
 Keep disk serialization, versioning, location selection, and atomic replacement
@@ -117,6 +131,7 @@ real credentials.
 | --- | --- |
 | Repository input, metadata, aggregation, and terminal rendering | Unit tests for parsing, grouping, ordering, warnings, output, and escaping |
 | GitHub access and discovery | Fixtures and local mock HTTP cover snapshots, authentication, truncation fallback, limits, retries, failures, and empty repositories |
+| Organization scans | Local mock HTTP covers pagination, forks, private and duplicate entries, invalid listings, per-repository failures, service failures that stop the scan, cache reuse, reports, and the web stream |
 | Analysis cache | Temporary directories and mocked HTTP verify persisted reuse, commit invalidation, cross-interface sharing, warnings, corrupt entries, failed refreshes, and unavailable storage |
 | Recent repositories | Temporary storage and mock scans verify ordering, deduplication, successful-only recording, concurrent writes, corruption handling, cross-interface persistence, and removal; subprocess tests verify offline CLI use |
 | Starred skills | Temporary storage verifies identity, validation, ordering, concurrent writes, corruption handling, and unavailable or disabled storage; in-process HTTP and subprocess tests verify the API, request protections, cross-interface persistence, and offline CLI use |
@@ -126,9 +141,9 @@ real credentials.
 | Browser behavior | Acceptance checks use mocked scan responses for repeatability without a GitHub token; PR video demos record passing E2E tests with screenshot assertions at key steps, following the [video demo requirements](../CONTRIBUTING.md#visual-feature-demonstrations) |
 
 The [browser E2E suite](../tests/e2e/README.md) runs the rebuilt executable in a
-pinned Playwright Linux container, with fixed scan fixtures and isolated
-history, starred, and cache directories. Recent-list/removal and starred-skill
-requests and CLI history and starred reads use the actual application. CI
-checks reviewed screenshot baselines without updates and retains reports,
-videos, and failure artifacts. Demo exports use the video attachment from that
-same passing test execution.
+pinned Playwright Linux container, with fixed repository and organization scan
+fixtures and isolated history, starred, and cache directories. Recent-list/removal
+and starred-skill requests and CLI history and starred reads use the actual
+application. CI checks reviewed screenshot baselines without updates and
+retains reports, videos, and failure artifacts. Demo exports use the video
+attachment from that same passing test execution.

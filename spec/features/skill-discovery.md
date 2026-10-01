@@ -17,7 +17,8 @@ Repositories follow the [repository access](repository-access.md) contract.
 3. Try a recursive Git tree request. If it is truncated, discard it and walk
    nonrecursive directory trees. Fail if even a nonrecursive listing is
    truncated; a large repository must never silently produce an incomplete
-   inventory.
+   inventory. [Organization scans](organization-scan.md#repository-scans) fail
+   the truncated repository instead of walking it.
 4. Identify each candidate by its repository-relative file path. Duplicate
    names in different directories remain separate results.
 5. Read each candidate's [metadata](skill-metadata.md) without executing

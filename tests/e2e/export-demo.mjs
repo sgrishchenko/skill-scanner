@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 // Each demo is recorded from its spec file's single test.
-const demos = { 'recent-repositories': 9, 'starred-skills': 9 };
+const demos = { 'organization-scan': 5, 'recent-repositories': 9, 'starred-skills': 9 };
 const name = process.argv[2];
 if (!(name in demos)) throw new Error(`Usage: npm run demo -- <${Object.keys(demos).join('|')}>`);
 const directory = fileURLToPath(new URL('.', import.meta.url));
