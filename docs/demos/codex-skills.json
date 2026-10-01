@@ -1,0 +1,20 @@
+{
+  "tested_revision": "d709633872317c351fc865a347f766f3dcf82ef6",
+  "environment": "mcr.microsoft.com/playwright:v1.63.0-noble (linux/amd64)",
+  "result": "passed",
+  "baseline_updates": "none",
+  "checkpoints": [
+    "01-ready-to-install",
+    "02-installing",
+    "03-installed",
+    "04-name-conflict",
+    "05-second-install",
+    "06-restart-persistence",
+    "07-remove-from-list",
+    "08-remove-from-card"
+  ],
+  "sha256": {
+    "mp4": "9525ff1561be336837edf884416e8d30f507f4427102ea8420c4ab76261f4337",
+    "gif": "d63f12f23f5e4bc4b29977c09454259e05990fdd729f713b7e42b718ae2e386a"
+  }
+}

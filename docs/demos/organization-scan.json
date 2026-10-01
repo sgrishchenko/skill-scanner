@@ -1,5 +1,5 @@
 {
-  "tested_revision": "c5167d2c5283af9c5ed0f566ee2d6447e149509f",
+  "tested_revision": "d709633872317c351fc865a347f766f3dcf82ef6",
   "environment": "mcr.microsoft.com/playwright:v1.63.0-noble (linux/amd64)",
   "result": "passed",
   "baseline_updates": "none",
@@ -11,7 +11,7 @@
     "05-rate-limit-stops-scan"
   ],
   "sha256": {
-    "mp4": "c379df072f0e8a578f74cbb9c83d5b75cbf35e336010f83db01e69621dbccd50",
-    "gif": "2239f4636257f5bcde6676683f87accc75e0170d897c64a5fca88883ea3c7809"
+    "mp4": "215f619874c526d2e878e1d21b1da5141eec32871454360fda4e0b5d5fbc9ddf",
+    "gif": "3d3478426151f6b69d64534ed0b94a2e703c5438b86d96c42971410f3f361527"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "tested_revision": "c5167d2c5283af9c5ed0f566ee2d6447e149509f",
+  "tested_revision": "d709633872317c351fc865a347f766f3dcf82ef6",
   "environment": "mcr.microsoft.com/playwright:v1.63.0-noble (linux/amd64)",
   "result": "passed",
   "baseline_updates": "none",
@@ -15,7 +15,7 @@
     "09-unstar-persists-after-restart"
   ],
   "sha256": {
-    "mp4": "400020bc06510f3e950f5e77fb662bba0162993225091db951b60c1142b4682e",
-    "gif": "c50423525f72394190f3f5c4e1d040b2b85719123fc3d549063e8677404c77a6"
+    "mp4": "7b661d0932589f5d3f2d219be7a69d342f7445ad698d6e617628193db3f20937",
+    "gif": "266ee0667eb072d12a9eb2597c6126ee5fa57f90c6a407f02e0d145239082fb1"
   }
 }
