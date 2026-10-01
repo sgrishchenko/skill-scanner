@@ -1,0 +1,17 @@
+{
+  "tested_revision": "15d71ec31530a491e0004f3da014e805f1afb762",
+  "environment": "mcr.microsoft.com/playwright:v1.63.0-noble (linux/amd64)",
+  "result": "passed",
+  "baseline_updates": "none",
+  "checkpoints": [
+    "01-organization-mode",
+    "02-scanning-organization",
+    "03-organization-results",
+    "04-filter-by-repository",
+    "05-rate-limit-stops-scan"
+  ],
+  "sha256": {
+    "mp4": "85b4b1cb70d216d21b035f7ae3227cce76ee23660421d18ace3b572d1a5f5689",
+    "gif": "33b5af382d3b64175d3b4df5d376d28c066f142a3a00fbfa175b6d312d846c3e"
+  }
+}
