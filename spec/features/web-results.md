@@ -14,7 +14,8 @@ similar-group size (zero when there are no similar groups). Statistics cover
 the entire scan and remain visible for successful empty scans with zero values.
 
 Each card shows the skill's name, description, repository-relative path, and
-commit-pinned GitHub source link. Use the scanner's directory/repository name
+commit-pinned GitHub source link, plus a **Star** toggle defined by
+[starred skills](starred-skills.md#web-interface). Use the scanner's directory/repository name
 fallback. Missing descriptions say “No description available.” Let users expand
 metadata warnings to read field-specific messages. Every source file remains
 individually accessible.
@@ -36,11 +37,13 @@ Standalone skills appear as individual cards.
 ## Search and filters
 
 Search names, descriptions, and paths by case-insensitive substring. Optionally
-show only similar skills or skills with warnings. Filters combine with AND,
+show only similar skills, skills with warnings, or
+[starred skills](starred-skills.md#web-interface). Filters combine with AND,
 apply to individual members in both views, and run locally without additional
 GitHub requests.
 
-Open matching groups automatically when searching or filtering by warnings,
+Open matching groups automatically when searching or filtering by warnings or
+stars,
 and state how many members remain visible. A group remains similar even when
 filters leave only one visible member. Summary and group statistics always
 describe the complete scan; filtering changes only visible members.
@@ -63,8 +66,8 @@ layouts support the same flow.
   warnings, and fallback text without hiding source files.
 - Grouped/all views retain every source. Similarity statistics and group counts
   agree with the CLI and remain stable when filters reduce visible members.
-- Search, similar-only, and warning filters combine correctly in both views
-  and can be cleared. Missing metadata does not create false similarity groups.
+- Search, similar-only, warning, and starred-only filters combine correctly in
+  both views and can be cleared. Missing metadata does not create false similarity groups.
 - Filtering all cards away preserves the inventory and offers a clear-filters
   action; empty scans retain their summary statistics.
 - Desktop and narrow-screen layouts support the same keyboard-accessible flow.

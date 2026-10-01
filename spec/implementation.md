@@ -68,6 +68,21 @@ operations run on `spawn_blocking` and use the normal local request protections.
 The [recent repositories feature](features/recent-repositories.md) defines
 locations, retention, error behavior, and concurrency semantics.
 
+## Starred skill storage
+
+Keep starred skills in `starred`, separate from history and the cache, using
+the shared `storage` helpers for state directories, flat repository filename
+stems, bounded entry reads, removal, and atomic replacement. Recent
+repositories use the same helpers. Each star is one versioned JSON file named
+by its repository stem and a 64-bit FNV-1a hash of its path, which is stable
+across platforms and releases. Listing verifies that each record's repository
+and path produce its filename, so hash collisions or edited files are ignored
+rather than misattributed. One file per star avoids read-modify-write races
+between processes. CLI and web entry points configure `StarredSkills` from the
+environment; web list, star, and unstar operations run on `spawn_blocking`.
+The [starred skills feature](features/starred-skills.md) defines locations,
+validation, and error behavior.
+
 ## Shared aggregation
 
 Implement [similarity grouping](features/similarity-grouping.md) in shared Rust
@@ -104,14 +119,16 @@ real credentials.
 | GitHub access and discovery | Fixtures and local mock HTTP cover snapshots, authentication, truncation fallback, limits, retries, failures, and empty repositories |
 | Analysis cache | Temporary directories and mocked HTTP verify persisted reuse, commit invalidation, cross-interface sharing, warnings, corrupt entries, failed refreshes, and unavailable storage |
 | Recent repositories | Temporary storage and mock scans verify ordering, deduplication, successful-only recording, concurrent writes, corruption handling, cross-interface persistence, and removal; subprocess tests verify offline CLI use |
+| Starred skills | Temporary storage verifies identity, validation, ordering, concurrent writes, corruption handling, and unavailable or disabled storage; in-process HTTP and subprocess tests verify the API, request protections, cross-interface persistence, and offline CLI use |
 | CLI | Subprocess tests verify exit codes and stdout/stderr separation |
 | Web API and scan lifecycle | In-process HTTP tests exercise the real scanner against mocked GitHub responses, including streaming, warnings, errors, empty results, concurrency, disconnects, input/body limits, and Host/Origin checks |
 | Embedded server | CLI subprocess tests start the site from another working directory and check port errors |
 | Browser behavior | Acceptance checks use mocked scan responses for repeatability without a GitHub token; PR video demos record passing E2E tests with screenshot assertions at key steps, following the [video demo requirements](../CONTRIBUTING.md#visual-feature-demonstrations) |
 
 The [browser E2E suite](../tests/e2e/README.md) runs the rebuilt executable in a
-pinned Playwright Linux container, with fixed scan fixtures and isolated history
-and cache directories. Recent-list/removal requests and CLI history reads use
-the actual application. CI checks reviewed screenshot baselines without updates
-and retains reports, videos, and failure artifacts. Demo exports use the video
-attachment from that same passing test execution.
+pinned Playwright Linux container, with fixed scan fixtures and isolated
+history, starred, and cache directories. Recent-list/removal and starred-skill
+requests and CLI history and starred reads use the actual application. CI
+checks reviewed screenshot baselines without updates and retains reports,
+videos, and failure artifacts. Demo exports use the video attachment from that
+same passing test execution.

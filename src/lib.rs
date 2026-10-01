@@ -7,6 +7,7 @@ pub mod recent;
 pub mod report;
 pub mod repository;
 pub mod scanner;
+pub mod starred;
 mod storage;
 pub mod web;
 

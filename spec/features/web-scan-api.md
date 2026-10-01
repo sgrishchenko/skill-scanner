@@ -12,6 +12,9 @@ Status: implemented. This internal HTTP contract serves the
 | `POST /api/scan` | Validate one repository and stream scan events |
 | `GET /api/recent` | List saved successful scans, newest first |
 | `POST /api/recent/remove` | Remove one repository from the recent list |
+| `GET /api/starred` | List starred skills, newest first |
+| `POST /api/starred/add` | Star one skill |
+| `POST /api/starred/remove` | Unstar one skill |
 
 ## Request validation
 
@@ -50,6 +53,25 @@ It returns HTTP 204 when removal succeeds or the entry is already absent.
 List/removal storage failures return HTTP 500 with an actionable JSON `message`.
 These routes neither start a scan nor acquire its semaphore. See
 [recent repositories](recent-repositories.md) for persistence and concurrency.
+
+## Starred skills
+
+`GET /api/starred` returns `{"enabled":true,"skills":[...]}`. Each entry
+contains `repository` (normalized string), `path`, `name`, `commit` (full SHA
+when starred), `link` (GitHub source URL pinned to that commit), and
+`starred_at` (UTC milliseconds since the Unix epoch). Disabled starring returns
+`enabled: false` and an empty list.
+
+`POST /api/starred/add` takes
+`{"repository":"example/skills","path":"skills/review/SKILL.md","name":"review","commit":"<full-sha>"}`.
+`POST /api/starred/remove` takes `{"repository":"example/skills","path":"skills/review/SKILL.md"}`.
+Both use the scan request's action header, content type, 4 KiB limit, unknown
+field rejection, and Host/Origin checks. They return HTTP 204 on success,
+including unstarring an absent skill, and HTTP 400 for an invalid repository,
+path, commit, or name under the [starring rules](starred-skills.md#starring-and-persistence).
+Starring while disabled returns HTTP 409; unstarring while disabled succeeds.
+Storage failures return HTTP 500 with an actionable JSON `message`. These
+routes do not contact GitHub, start a scan, or acquire its semaphore.
 
 ## Streaming events
 

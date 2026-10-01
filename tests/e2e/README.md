@@ -1,9 +1,14 @@
 # Browser E2E tests and demo recording
 
-The [recent repositories test](recent-repositories.spec.mjs) drives the rebuilt
-application and records the same run that checks behavior and compares nine
-named screenshots against [reviewed baselines](snapshots/recent-repositories.spec.mjs).
-The [demo](../../docs/demos/recent-repositories.md) follows the
+Each test drives the rebuilt application and records the same run that checks
+behavior and compares named screenshots against reviewed baselines:
+
+| Test | Baselines | Demo |
+| --- | --- | --- |
+| [Recent repositories](recent-repositories.spec.mjs) | [Nine screenshots](snapshots/recent-repositories.spec.mjs) | [Recording](../../docs/demos/recent-repositories.md) |
+| [Starred skills](starred-skills.spec.mjs) | [Nine screenshots](snapshots/starred-skills.spec.mjs) | [Recording](../../docs/demos/starred-skills.md) |
+
+The demos follow the
 [PR demonstration requirements](../../CONTRIBUTING.md#visual-feature-demonstrations).
 
 ## Reproduce
@@ -24,17 +29,18 @@ docker run --rm --init --ipc=host --platform linux/amd64 \
   mcr.microsoft.com/playwright:v1.63.0-noble npm test --prefix tests/e2e
 ```
 
-Always rebuild first, including after browser asset changes. The test starts
-`target/debug/skill-scanner` on an available loopback port and restarts it twice
-on newly allocated ports. Each run gets history and cache directories under
-its own Playwright output directory. Tokens are removed from child process
+Always rebuild first, including after browser asset changes. Each test starts
+`target/debug/skill-scanner` on an available loopback port and restarts it on
+newly allocated ports. Each test gets history, starred, and cache directories
+under its own Playwright output directory. Tokens are removed from child process
 environments. External browser requests are blocked and fail the test; a dead
 proxy also prevents accidental server-side GitHub access.
 
 Only `/api/scan` responses and their successful-scan history writes are mocked
 using [fixed fixtures](fixtures/scans.json). The embedded browser assets,
-`/api/recent`, `/api/recent/remove`, disk persistence, and `skill-scanner recent`
-run unchanged. This tests the browser workflow and shared history, while
+`/api/recent`, `/api/recent/remove`, `/api/starred` and its add/remove routes,
+disk persistence, `skill-scanner recent`, and `skill-scanner starred` run
+unchanged. This tests the browser workflow and shared history, while
 [Rust scan tests](../../src/recent_scan_tests.rs) independently verify actual
 scanner recording behavior with mocked GitHub responses.
 
@@ -59,7 +65,7 @@ the test, fixtures, and reviewed baselines, then rerun the normal command with
 updates disabled. Keep the Playwright package lock, image tag, and documented
 environment in sync when upgrading the browser.
 
-The checkpoints are:
+The recent repositories checkpoints are:
 
 | Screenshot | Behavior asserted before comparison |
 | --- | --- |
@@ -78,23 +84,44 @@ request sequence, absence of external requests, and absence of JavaScript errors
 Error/recovery and mobile scenarios are outside this demo's sequence; their
 broader acceptance requirements remain in the feature spec.
 
+The starred skills checkpoints are:
+
+| Screenshot | Behavior asserted before comparison |
+| --- | --- |
+| `01-unstarred-results` | Empty starred list and unpressed star buttons after a scan |
+| `02-star-skill` | Starring keeps focus, updates the button and list, pins the source link, and is visible to the CLI |
+| `03-starred-only-filter` | The filter shows only the starred skill and the visible count |
+| `04-stars-across-repositories` | Keyboard starring in another repository; the list is newest first; the filter reset |
+| `05-restart-persistence` | Restart preserves the list and CLI order; results reset |
+| `06-rescan-keeps-stars` | A new scan of the first repository shows the persisted star on the same path only |
+| `07-unstar-from-results` | Unstarring from a card updates the button and list |
+| `08-unstar-from-list` | Unstarring from the list focuses its heading and keeps the current results |
+| `09-unstar-persists-after-restart` | Another restart and the CLI confirm no stars remain |
+
+It also checks the exact scan request sequence, absence of external requests,
+and absence of JavaScript errors. Error/recovery and mobile scenarios remain
+acceptance requirements in the [feature spec](../../spec/features/starred-skills.md).
+
 ## Export the passing recording
 
-After committing the test, fixtures, and reviewed baselines, run the normal
-test command again from a clean checkout. With FFmpeg installed on the host:
+After committing the tests, fixtures, and reviewed baselines, run the normal
+test command again from a clean checkout. With FFmpeg installed on the host,
+export each demo from that run:
 
 ```sh
-npm run demo --prefix tests/e2e
+npm run demo --prefix tests/e2e -- recent-repositories
+npm run demo --prefix tests/e2e -- starred-skills
 ```
 
-The exporter requires a clean tested commit, exactly one passing test, all nine
-screenshot checkpoints, no retries/skips, and baseline updates disabled. It
-converts that run's video attachment into the checked-in MP4 and animated GIF,
-without changing the sequence, and writes a manifest with the tested revision,
-environment, checkpoint names, and media hashes. It accepts Docker report paths.
+The exporter requires a clean tested commit, every test passing with no
+retries/skips, exactly one test in the named spec with all nine screenshot
+checkpoints, and baseline updates disabled. It converts that test's video
+attachment into the checked-in MP4 and animated GIF, without changing the
+sequence, and writes a manifest with the tested revision, environment,
+checkpoint names, and media hashes. It accepts Docker report paths.
 Do not export a baseline-generation run or a separate recording script.
 
-Commit the regenerated media and manifest, link this test and its baselines in
+Commit the regenerated media and manifest, link the test and its baselines in
 the PR, and embed the GIF with a link to the MP4 if GitHub video attachment upload
 is unavailable. The manifest identifies the source commit used for recording;
 the subsequent media-only commit does not change the tested code or baselines.

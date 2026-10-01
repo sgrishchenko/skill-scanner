@@ -16,6 +16,7 @@ rules apply to both interfaces; interface documents link to those rules.
 | [Skill discovery](features/skill-discovery.md) | Default-branch snapshot, recursive discovery, progress, ordering, and scan completeness |
 | [Analysis cache](features/analysis-cache.md) | Persistent shared analyses, commit validation, invalidation, storage, and cache failures |
 | [Recent repositories](features/recent-repositories.md) | Shared persistent recent list, completion times, selection, and removal |
+| [Starred skills](features/starred-skills.md) | Persistent stars shared by both interfaces, the starred list and filter, and unstarring |
 | [Skill metadata](features/skill-metadata.md) | YAML fields, file limits, warnings, and display fallbacks |
 | [Similarity grouping](features/similarity-grouping.md) | Metadata matching, connected groups, ordering, and statistics |
 | [CLI report](features/cli-report.md) | Commands, terminal inventory, stdout/stderr, and exit codes |
@@ -51,4 +52,5 @@ transport is not a general export API and does not add a CLI JSON mode.
 The [analysis cache](features/analysis-cache.md) speeds up repeated scans after
 online commit validation. The
 [recent repository list](features/recent-repositories.md) separately remembers
-successful scans and supports removal.
+successful scans and supports removal, and
+[starred skills](features/starred-skills.md) keep chosen skills across scans.

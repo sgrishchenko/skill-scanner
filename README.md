@@ -10,6 +10,8 @@ skill-scanner scan https://github.com/OWNER/REPO
 skill-scanner serve
 skill-scanner recent
 skill-scanner recent remove OWNER/REPO
+skill-scanner starred
+skill-scanner starred remove OWNER/REPO PATH
 skill-scanner --help
 skill-scanner --version
 ```
@@ -120,6 +122,29 @@ or disabling the cache leaves recent repositories intact. History records only
 the repository, completion time, and skill count. If it cannot save an entry,
 the scan succeeds with a warning. See the
 [recent repositories spec](spec/features/recent-repositories.md) for details.
+
+## Starred skills
+
+Select **Star** on any skill card in the web results to keep it in
+**Starred skills**, newest first, with its repository, path, and a source link
+pinned to the commit you starred it at. Select **Starred** to unstar it, or use
+**Unstar** in the list. **Starred only** narrows the current results to starred
+skills. Stars survive reloads and restarts, and a later scan of the same
+repository shows them on the same paths.
+
+From the terminal, without contacting GitHub:
+
+```sh
+skill-scanner starred
+skill-scanner starred remove OWNER/REPO PATH
+```
+
+Stars are kept in a `starred` directory next to the recent repository history,
+for example `$HOME/.local/state/skill-scanner/starred` on Linux. Set
+`SKILL_SCANNER_STARRED_DIR` to override it, or set it to an empty value to
+disable starring. Stars are independent of history and the cache; removing a
+recent repository or clearing the cache keeps them. See the
+[starred skills spec](spec/features/starred-skills.md) for details.
 
 ## Analysis cache
 
@@ -269,10 +294,11 @@ or tokens. Keep `Cargo.lock` checked in; it includes a `yoke-derive` version
 compatible with Rust 1.84 (0.8.3 incorrectly uses a newer standard-library API).
 
 Modules separate argument parsing, repository input, GitHub transport, discovery,
-analysis caching, recent repositories, metadata, terminal rendering, and the web
+analysis caching, recent repositories, starred skills, metadata, terminal rendering, and the web
 server. Browser assets live in `web/`.
 The optional [browser E2E suite](tests/e2e/README.md) uses pinned Playwright
-tooling and screenshot baselines to reproduce the recent repositories demo.
+tooling and screenshot baselines to reproduce the recent repositories and
+starred skills demos.
 It runs in CI and uses mocked scan responses with isolated local storage.
 See the [feature specification index](spec/README.md) for behavior and acceptance
 checks, and [implementation decisions](spec/implementation.md) for architecture

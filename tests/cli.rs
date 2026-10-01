@@ -6,6 +6,7 @@ fn run(args: &[&str]) -> std::process::Output {
         .env_remove("GITHUB_TOKEN")
         .env("SKILL_SCANNER_HISTORY_DIR", "")
         .env("SKILL_SCANNER_CACHE_DIR", "")
+        .env("SKILL_SCANNER_STARRED_DIR", "")
         .output()
         .unwrap()
 }
@@ -18,6 +19,8 @@ fn help_and_version_succeed_without_network_or_credentials() {
         &["serve", "--help"][..],
         &["recent", "--help"][..],
         &["recent", "remove", "--help"][..],
+        &["starred", "--help"][..],
+        &["starred", "remove", "--help"][..],
         &["--version"][..],
     ] {
         let output = run(args);
@@ -42,6 +45,11 @@ fn invalid_usage_exits_two_and_never_prints_an_inventory() {
         &["serve", "--host", "0.0.0.0"][..],
         &["recent", "remove"][..],
         &["recent", "remove", "../escape"][..],
+        &["starred", "remove"][..],
+        &["starred", "remove", "a/b"][..],
+        &["starred", "remove", "../escape", "SKILL.md"][..],
+        &["starred", "remove", "a/b", "../SKILL.md"][..],
+        &["starred", "remove", "a/b", "README.md"][..],
     ] {
         let output = run(args);
         assert_eq!(output.status.code(), Some(2));
@@ -118,6 +126,92 @@ fn recent_commands_persist_removal_and_work_without_valid_github_credentials() {
         assert!(String::from_utf8(output.stderr)
             .unwrap()
             .contains("SKILL_SCANNER_HISTORY_DIR"));
+    }
+    assert_eq!(std::fs::read_to_string(file).unwrap(), "file");
+}
+
+#[test]
+fn starred_commands_list_and_persist_removal_without_github_access() {
+    use skill_scanner::starred::StarredSkills;
+    let directory =
+        std::env::temp_dir().join(format!("skill-scanner-cli-starred-{}", std::process::id()));
+    struct Directory(std::path::PathBuf);
+    impl Drop for Directory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    std::fs::create_dir(&directory).unwrap();
+    let directory = Directory(directory);
+    let starred = StarredSkills::new(directory.0.clone());
+    let commit = "1111111111111111111111111111111111111111";
+    starred
+        .star(
+            &"example/skills".parse().unwrap(),
+            "skills/review/SKILL.md",
+            "review\u{1b}[31m",
+            commit,
+        )
+        .unwrap();
+    let invoke = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
+            .args(args)
+            .env("SKILL_SCANNER_STARRED_DIR", &directory.0)
+            .env("GITHUB_TOKEN", "secret\ninvalid-header")
+            .env("HTTPS_PROXY", "http://127.0.0.1:9")
+            .output()
+            .unwrap()
+    };
+    let output = invoke(&["starred"]);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert!(!output.stdout.contains(&0x1b));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!(
+            "Starred skills (newest first):\n\nreview\\u{{1b}}[31m\n  Repository: example/skills\n  Path: skills/review/SKILL.md\n  Link: https://github.com/example/skills/blob/{commit}/skills/review/SKILL.md\n"
+        )
+    );
+    for _ in 0..2 {
+        let output = invoke(&[
+            "starred",
+            "remove",
+            "https://github.com/EXAMPLE/Skills.git/",
+            "skills/review/SKILL.md",
+        ]);
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            "Unstarred skills/review/SKILL.md in EXAMPLE/Skills.\n"
+        );
+    }
+    assert!(starred.list().unwrap().is_empty());
+    let output = invoke(&["starred"]);
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("No starred skills."));
+    let output = run(&["starred"]);
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("disabled"));
+    let file = directory.0.join("file");
+    std::fs::write(&file, "file").unwrap();
+    for args in [
+        &["starred"][..],
+        &["starred", "remove", "example/skills", "SKILL.md"][..],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
+            .args(args)
+            .env("SKILL_SCANNER_STARRED_DIR", &file)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("SKILL_SCANNER_STARRED_DIR"));
     }
     assert_eq!(std::fs::read_to_string(file).unwrap(), "file");
 }
