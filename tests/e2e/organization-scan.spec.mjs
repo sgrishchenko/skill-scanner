@@ -78,6 +78,16 @@ test('organization scans combine repository results, report failures, and stop o
     await expect(page.locator('#recent-status')).toHaveText('No recently scanned repositories yet.');
     await checkpoint('03-organization-results');
 
+    // Stars address the skill's own repository, path, and scanned commit.
+    const star = page.getByRole('button', { name: 'Star example/agent-tools/skills/release-notes/SKILL.md', exact: true });
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'true');
+    await expect(star).toBeFocused();
+    await expect(page.locator('#starred-list .recent-hint')).toHaveText(['example/agent-tools · skills/release-notes/SKILL.md']);
+    await expect(page.getByRole('link', { name: 'View skills/release-notes/SKILL.md in example/agent-tools on GitHub (opens in a new tab)' }))
+      .toHaveAttribute('href', 'https://github.com/example/agent-tools/blob/1111111111111111111111111111111111111111/skills/release-notes/SKILL.md');
+    expect(app.starred()).toContain('release-notes\n  Repository: example/agent-tools\n  Path: skills/release-notes/SKILL.md\n');
+
     await page.locator('#without-skills-summary').click();
     await expect(page.locator('#without-skills-list > li')).toHaveText(['example/docs-site', 'example/sandbox (empty)']);
     await page.getByRole('searchbox', { name: 'Search skills' }).fill('example/review-bot/');

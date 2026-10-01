@@ -88,7 +88,10 @@ the results incomplete. Organization scans do not add or update
 - **Web:** the scan form's **Organization** mode submits to
   [`POST /api/scan-org`](web-scan-api.md#organization-scans) under the same
   one-scan-per-server rule, and the [results](web-results.md#organization-results)
-  add a repository summary to the usual skill views.
+  add a repository summary to the usual skill views. Starring a skill in
+  organization results records [its own repository](starred-skills.md#starring-and-persistence),
+  repository-relative path, and that repository's scanned commit, so the star
+  matches the same skill in a repository scan.
 
 ## Acceptance checks
 
@@ -111,3 +114,5 @@ Use mocked GitHub or browser scan responses, without live GitHub access.
 - The CLI exits 1 with a complete report when any repository failed. The web
   interface labels such results incomplete and lists the failures.
 - Organization and repository scans share the one-scan-per-server limit.
+- Starring from organization results records the skill's own repository,
+  repository-relative path, and commit.

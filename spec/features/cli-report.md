@@ -17,6 +17,8 @@ skill-scanner serve
 skill-scanner serve --port 8080
 skill-scanner recent
 skill-scanner recent remove OWNER/REPO
+skill-scanner starred
+skill-scanner starred remove OWNER/REPO PATH
 skill-scanner --help
 skill-scanner --version
 ```
@@ -32,6 +34,8 @@ organization or user; see [organization scan](organization-scan.md) and the
 forgets an entry. See [recent repositories](recent-repositories.md) for storage,
 ordering, and removal semantics. History access errors exit 1; successful list
 and removal operations exit 0, and invalid repository inputs exit 2.
+`starred` lists starred skills and `starred remove` unstars one, with the same
+exit codes; see [starred skills](starred-skills.md#cli).
 Branch selection and CLI JSON export remain deferred.
 
 ## Output streams and progress

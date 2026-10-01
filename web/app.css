@@ -1038,6 +1038,47 @@ progress::-moz-progress-bar {
   unicode-bidi: plaintext;
 }
 
+.skill-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skill-heading>:first-child {
+  min-width: 0;
+}
+
+.star-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--green);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.star-button[aria-disabled=true] {
+  cursor: wait;
+  opacity: .65;
+}
+
+.star-button[aria-pressed=true] {
+  background: var(--lime);
+  border-color: #c4d59c;
+  font-weight: 600;
+}
+
+.star-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
 .skill-description {
   font-size: 12px;
   line-height: 1.75;
@@ -1220,6 +1261,29 @@ footer {
 .recent-row>.text-button {
   flex-shrink: 0;
   min-height: 36px;
+}
+.starred-name {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+}
+.starred-row .recent-hint {
+  overflow-wrap: anywhere;
+}
+.starred-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+.starred-actions .text-button {
+  margin-top: 0;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
 }
 
 @media(min-width:1440px) {
@@ -1451,6 +1515,14 @@ footer {
   }
   .warning-filter {
     align-self: flex-start;
+  }
+  .starred-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .starred-actions {
+    margin-left: -7px;
   }
   .skill-list,.group-members {
     grid-template-columns: 1fr;

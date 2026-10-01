@@ -7,13 +7,15 @@ use std::{
 use clap::Parser;
 use skill_scanner::{
     cache::ScanCache,
-    cli::{Cli, Command, RecentAction},
+    cli::{Cli, Command, RecentAction, StarredAction},
     github::GitHubClient,
     organization,
     recent::RecentRepositories,
     report,
     repository::{Owner, Repository},
-    scanner, web,
+    scanner,
+    starred::StarredSkills,
+    web,
 };
 
 fn main() -> ExitCode {
@@ -24,6 +26,9 @@ fn main() -> ExitCode {
         Command::Scan { repository }
         | Command::Recent {
             action: Some(RecentAction::Remove { repository }),
+        }
+        | Command::Starred {
+            action: Some(StarredAction::Remove { repository, .. }),
         } => match repository.parse::<Repository>() {
             Ok(repository) => Some(repository),
             Err(error) => {
@@ -31,7 +36,10 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
         },
-        Command::Serve { .. } | Command::ScanOrg { .. } | Command::Recent { action: None } => None,
+        Command::Serve { .. }
+        | Command::ScanOrg { .. }
+        | Command::Recent { action: None }
+        | Command::Starred { action: None } => None,
     };
     let owner = match &command {
         Command::ScanOrg { organization } => match organization.parse::<Owner>() {
@@ -43,6 +51,36 @@ fn main() -> ExitCode {
         },
         _ => None,
     };
+    if let Command::Starred { action } = command {
+        let starred = StarredSkills::from_environment();
+        let result = match action {
+            Some(StarredAction::Remove { path, .. }) => {
+                let repository = repository.expect("remove command has a repository");
+                starred.unstar(&repository, &path).and_then(|()| {
+                    writeln!(
+                        io::stdout().lock(),
+                        "Unstarred {} in {repository}.",
+                        report::terminal_text(&path)
+                    )
+                })
+            }
+            None => starred.list().and_then(|skills| {
+                report::write_starred(io::stdout().lock(), &skills, starred.is_enabled())
+            }),
+        };
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+            Err(error) if error.kind() == io::ErrorKind::InvalidInput => {
+                let _ = writeln!(io::stderr().lock(), "error: {error}");
+                ExitCode::from(2)
+            }
+            Err(_) => {
+                let _ = writeln!(io::stderr().lock(), "error: could not access starred skills; check SKILL_SCANNER_STARRED_DIR and directory permissions.");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let recent = RecentRepositories::from_environment();
     if let Command::Recent { action } = command {
         let result = match action {

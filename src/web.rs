@@ -22,6 +22,7 @@ use crate::{
     report,
     repository::{Owner, Repository},
     scanner::{self, Inventory, ScanProgress, Skill},
+    starred::StarredSkills,
 };
 
 const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
@@ -31,6 +32,7 @@ struct WebState {
     client: Arc<GitHubClient>,
     cache: ScanCache,
     recent: RecentRepositories,
+    starred: StarredSkills,
     available: Arc<Semaphore>,
 }
 
@@ -44,6 +46,22 @@ struct ScanRequest {
 #[serde(deny_unknown_fields)]
 struct OrganizationRequest {
     organization: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StarRequest {
+    repository: String,
+    path: String,
+    name: String,
+    commit: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UnstarRequest {
+    repository: String,
+    path: String,
 }
 
 #[derive(Serialize)]
@@ -138,6 +156,7 @@ pub fn serve(port: u16, client: GitHubClient) -> io::Result<()> {
                 port,
                 ScanCache::from_environment(),
                 RecentRepositories::from_environment(),
+                StarredSkills::from_environment(),
             ),
         )
         .await
@@ -149,6 +168,7 @@ pub(crate) fn router(
     port: u16,
     cache: ScanCache,
     recent: RecentRepositories,
+    starred: StarredSkills,
 ) -> Router {
     Router::new()
         .route(
@@ -181,11 +201,15 @@ pub(crate) fn router(
         .route("/api/scan-org", post(scan_organization))
         .route("/api/recent", get(list_recent))
         .route("/api/recent/remove", post(remove_recent))
+        .route("/api/starred", get(list_starred))
+        .route("/api/starred/add", post(star))
+        .route("/api/starred/remove", post(unstar))
         .fallback(|| async { error(StatusCode::NOT_FOUND, "Page not found.") })
         .with_state(WebState {
             client,
             cache,
             recent,
+            starred,
             available: Arc::new(Semaphore::new(1)),
         })
         .layer(DefaultBodyLimit::max(4096))
@@ -283,6 +307,85 @@ async fn remove_recent(
 
 fn history_error() -> Response {
     error(StatusCode::INTERNAL_SERVER_ERROR, "Could not access recent repositories. Check SKILL_SCANNER_HISTORY_DIR and directory permissions.")
+}
+
+async fn list_starred(State(state): State<WebState>) -> Response {
+    let enabled = state.starred.is_enabled();
+    match tokio::task::spawn_blocking(move || state.starred.list()).await {
+        Ok(Ok(skills)) => Json(serde_json::json!({
+            "enabled": enabled,
+            "skills": skills,
+        }))
+        .into_response(),
+        _ => starred_error(),
+    }
+}
+
+async fn star(
+    State(state): State<WebState>,
+    body: Result<Json<StarRequest>, JsonRejection>,
+) -> Response {
+    let input = match body {
+        Ok(Json(input)) => input,
+        Err(rejection) => return error(
+            rejection.status(),
+            "Send a JSON object with repository, path, name, and commit fields (maximum 4 KiB).",
+        ),
+    };
+    let repository = match input.repository.trim().parse::<Repository>() {
+        Ok(repository) => repository,
+        Err(message) => return error(StatusCode::BAD_REQUEST, &message),
+    };
+    if !state.starred.is_enabled() {
+        return error(
+            StatusCode::CONFLICT,
+            "Starred skills are disabled on this server. Set SKILL_SCANNER_STARRED_DIR to enable them.",
+        );
+    }
+    starred_result(
+        tokio::task::spawn_blocking(move || {
+            state
+                .starred
+                .star(&repository, &input.path, &input.name, &input.commit)
+        })
+        .await,
+    )
+}
+
+async fn unstar(
+    State(state): State<WebState>,
+    body: Result<Json<UnstarRequest>, JsonRejection>,
+) -> Response {
+    let input = match body {
+        Ok(Json(input)) => input,
+        Err(rejection) => {
+            return error(
+                rejection.status(),
+                "Send a JSON object with repository and path fields (maximum 4 KiB).",
+            )
+        }
+    };
+    let repository = match input.repository.trim().parse::<Repository>() {
+        Ok(repository) => repository,
+        Err(message) => return error(StatusCode::BAD_REQUEST, &message),
+    };
+    starred_result(
+        tokio::task::spawn_blocking(move || state.starred.unstar(&repository, &input.path)).await,
+    )
+}
+
+fn starred_result(result: Result<io::Result<()>, tokio::task::JoinError>) -> Response {
+    match result {
+        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Err(failure)) if failure.kind() == io::ErrorKind::InvalidInput => {
+            error(StatusCode::BAD_REQUEST, &failure.to_string())
+        }
+        _ => starred_error(),
+    }
+}
+
+fn starred_error() -> Response {
+    error(StatusCode::INTERNAL_SERVER_ERROR, "Could not access starred skills. Check SKILL_SCANNER_STARRED_DIR and directory permissions.")
 }
 
 async fn scan(

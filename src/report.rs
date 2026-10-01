@@ -5,6 +5,7 @@ use crate::{
     organization::{OrganizationInventory, OrganizationProgress},
     recent::RecentRepository,
     scanner::{Inventory, ScanProgress, Skill},
+    starred::StarredSkill,
 };
 
 /// Prevent repository-controlled text from issuing terminal commands or changing
@@ -114,6 +115,34 @@ pub fn write_recent(
                 terminal_text(&entry.repository),
                 entry.skill_count
             )?;
+        }
+    }
+    Ok(())
+}
+
+pub fn write_starred(
+    mut output: impl Write,
+    skills: &[StarredSkill],
+    enabled: bool,
+) -> io::Result<()> {
+    if !enabled {
+        writeln!(
+            output,
+            "Starred skills are disabled. Set SKILL_SCANNER_STARRED_DIR to enable them."
+        )?;
+    } else if skills.is_empty() {
+        writeln!(
+            output,
+            "No starred skills. Star skills from scan results in skill-scanner serve."
+        )?;
+    } else {
+        writeln!(output, "Starred skills (newest first):")?;
+        for skill in skills {
+            writeln!(output)?;
+            writeln!(output, "{}", terminal_text(&skill.name))?;
+            writeln!(output, "  Repository: {}", skill.repository)?;
+            writeln!(output, "  Path: {}", terminal_text(&skill.path))?;
+            writeln!(output, "  Link: {}", skill.link)?;
         }
     }
     Ok(())

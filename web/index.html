@@ -49,6 +49,13 @@
           <p id="recent-error" class="error-panel" role="alert" hidden></p>
           <ul id="recent-list" class="recent-list"></ul>
         </section>
+        <section class="recent-section" aria-labelledby="starred-title">
+          <div class="recent-heading"><h3 id="starred-title" tabindex="-1">Starred skills</h3></div>
+          <p class="recent-hint">Saved on this machine. Star skills in the results to keep them here.</p>
+          <p id="starred-status" class="recent-hint" role="status" aria-live="polite">Loading starred skills…</p>
+          <p id="starred-error" class="error-panel" role="alert" hidden></p>
+          <ul id="starred-list" class="recent-list"></ul>
+        </section>
         <noscript><p class="error-panel">Enable JavaScript to scan repositories in this interface, or use <code>skill-scanner scan OWNER/REPO</code> in a terminal.</p></noscript>
         <div id="error" class="error-panel" role="alert" tabindex="-1" hidden><strong>Scan couldn’t finish</strong><p id="error-message"></p></div>
         <div id="progress-panel" class="progress-panel" hidden>
@@ -91,7 +98,7 @@
             </section>
             <div id="result-controls">
               <div class="result-views" role="group" aria-label="Result view"><button id="grouped-view" type="button" aria-pressed="true">Grouped skills</button><button id="all-view" type="button" aria-pressed="false">All skills</button></div>
-              <div id="filters" class="filters"><label class="search-field"><span aria-hidden="true">⌕</span><span class="sr-only">Search skills</span><input id="search" type="search" placeholder="Search names, descriptions, or paths…" autocomplete="off"></label><label class="warning-filter"><input id="similar-only" type="checkbox">Similar only</label><label class="warning-filter"><input id="warnings-only" type="checkbox">With warnings</label></div>
+              <div id="filters" class="filters"><label class="search-field"><span aria-hidden="true">⌕</span><span class="sr-only">Search skills</span><input id="search" type="search" placeholder="Search names, descriptions, or paths…" autocomplete="off"></label><label class="warning-filter"><input id="similar-only" type="checkbox">Similar only</label><label class="warning-filter"><input id="warnings-only" type="checkbox">With warnings</label><label id="starred-filter" class="warning-filter"><input id="starred-only" type="checkbox">Starred only</label></div>
             </div>
             <p id="result-count" class="result-count" role="status" aria-live="polite"></p>
             <div id="skill-list" class="skill-list"></div>

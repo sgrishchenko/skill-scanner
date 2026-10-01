@@ -3,13 +3,13 @@
 Each test drives the rebuilt application and records the same run that checks
 behavior and compares named screenshots against reviewed baselines:
 
-- The [recent repositories test](recent-repositories.spec.mjs) has nine
-  [baselines](snapshots/recent-repositories.spec.mjs) and a recorded
-  [demo](../../docs/demos/recent-repositories.md).
-- The [organization scan test](organization-scan.spec.mjs) has five
-  [baselines](snapshots/organization-scan.spec.mjs).
+| Test | Baselines | Demo |
+| --- | --- | --- |
+| [Recent repositories](recent-repositories.spec.mjs) | [Nine screenshots](snapshots/recent-repositories.spec.mjs) | [Recording](../../docs/demos/recent-repositories.md) |
+| [Starred skills](starred-skills.spec.mjs) | [Nine screenshots](snapshots/starred-skills.spec.mjs) | [Recording](../../docs/demos/starred-skills.md) |
+| [Organization scan](organization-scan.spec.mjs) | [Five screenshots](snapshots/organization-scan.spec.mjs) | Not yet recorded |
 
-Demos follow the
+The demos follow the
 [PR demonstration requirements](../../CONTRIBUTING.md#visual-feature-demonstrations).
 
 ## Reproduce
@@ -30,10 +30,11 @@ docker run --rm --init --ipc=host --platform linux/amd64 \
   mcr.microsoft.com/playwright:v1.63.0-noble npm test --prefix tests/e2e
 ```
 
-Always rebuild first, including after browser asset changes. The test starts
+Always rebuild first, including after browser asset changes. Each test starts
 `target/debug/skill-scanner` on an available loopback port; the recent
-repositories test restarts it twice on newly allocated ports. Each run gets history and cache directories under
-its own Playwright output directory. Tokens are removed from child process
+repositories and starred skills tests restart it on newly allocated ports. Each
+test gets history, starred, and cache directories under its own Playwright
+output directory. Tokens are removed from child process
 environments. External browser requests are blocked and fail the test; a dead
 proxy also prevents accidental server-side GitHub access.
 
@@ -41,9 +42,10 @@ Only `/api/scan` responses and their successful-scan history writes are mocked
 using [fixed fixtures](fixtures/scans.json), and `/api/scan-org` responses use
 complete [organization event streams](fixtures/organization-scans.json) without
 history writes. Each test treats the other scan route as an unexpected request.
-The embedded browser assets,
-`/api/recent`, `/api/recent/remove`, disk persistence, and `skill-scanner recent`
-run unchanged. This tests the browser workflow and shared history, while
+The embedded browser assets, `/api/recent`, `/api/recent/remove`, `/api/starred`
+and its add/remove routes, disk persistence, `skill-scanner recent`, and
+`skill-scanner starred` run unchanged. This tests the browser workflow and
+shared history, while
 [Rust scan tests](../../src/recent_scan_tests.rs) independently verify actual
 scanner recording behavior with mocked GitHub responses.
 
@@ -92,7 +94,7 @@ The organization scan checkpoints are:
 | `01-organization-mode` | Toggle switches the heading, label, placeholder, hint, and examples; an example fills and focuses the field without scanning |
 | `02-scanning-organization` | Pending scan disables the field, mode toggle, examples, and submission and hides results |
 | `03-organization-results` | Combined results list the failed repository first, repositories with skills and pinned commits, and a cross-repository similar group; recent repositories stay empty |
-| `04-filter-by-repository` | Repositories without skills expand, and searching a repository path filters members while statistics stay unchanged |
+| `04-filter-by-repository` | Starring an organization skill records its own repository, relative path, and commit in the list and CLI; repositories without skills expand; searching a repository path filters members while statistics stay unchanged |
 | `05-rate-limit-stops-scan` | A rate limit shows the stopping diagnostic, restores the form, and shows no partial results |
 
 It also checks the request bodies, a return to repository mode, absence of
@@ -100,27 +102,46 @@ external requests, and absence of JavaScript errors.
 Error/recovery and mobile scenarios are outside this demo's sequence; their
 broader acceptance requirements remain in the feature spec.
 
+The starred skills checkpoints are:
+
+| Screenshot | Behavior asserted before comparison |
+| --- | --- |
+| `01-unstarred-results` | Empty starred list and unpressed star buttons after a scan |
+| `02-star-skill` | Starring keeps focus, updates the button and list, pins the source link, and is visible to the CLI |
+| `03-starred-only-filter` | The filter shows only the starred skill and the visible count |
+| `04-stars-across-repositories` | Keyboard starring in another repository; the list is newest first; the filter reset |
+| `05-restart-persistence` | Restart preserves the list and CLI order; results reset |
+| `06-rescan-keeps-stars` | A new scan of the first repository shows the persisted star on the same path only |
+| `07-unstar-from-results` | Unstarring from a card updates the button and list |
+| `08-unstar-from-list` | Unstarring from the list focuses its heading and keeps the current results |
+| `09-unstar-persists-after-restart` | Another restart and the CLI confirm no stars remain |
+
+It also checks the exact scan request sequence, absence of external requests,
+and absence of JavaScript errors. Error/recovery and mobile scenarios remain
+acceptance requirements in the [feature spec](../../spec/features/starred-skills.md).
+
 ## Export the passing recording
 
-After committing the test, fixtures, and reviewed baselines, run the normal
-test command for only the demonstrated spec from a clean checkout, appending
-`-- organization-scan.spec.mjs` (or another spec file) to `npm test`. With
-FFmpeg installed on the host, export that spec's recording:
+After committing the tests, fixtures, and reviewed baselines, run the normal
+test command again from a clean checkout. With FFmpeg installed on the host,
+export each demo from that run:
 
 ```sh
+npm run demo --prefix tests/e2e -- recent-repositories
+npm run demo --prefix tests/e2e -- starred-skills
 npm run demo --prefix tests/e2e -- organization-scan
 ```
 
-Without an argument, the exporter uses `recent-repositories`. It requires a
-clean tested commit, exactly one passing test from that spec, every screenshot
-checkpoint in its baseline directory, no retries/skips, and baseline updates
-disabled. It converts that run's video attachment into the checked-in
-`docs/demos/<spec>.mp4` and animated `.gif`, without changing the sequence, and
-writes a `.json` manifest with the tested revision,
-environment, checkpoint names, and media hashes. It accepts Docker report paths.
+The exporter requires a clean tested commit, every test passing with no
+retries/skips, exactly one test in the named spec with all of its screenshot
+checkpoints (five for the organization scan, nine for the others), and baseline
+updates disabled. It converts that test's video attachment into the checked-in
+MP4 and animated GIF, without changing the sequence, and writes a manifest with
+the tested revision, environment, checkpoint names, and media hashes. It
+accepts Docker report paths.
 Do not export a baseline-generation run or a separate recording script.
 
-Commit the regenerated media and manifest, link this test and its baselines in
+Commit the regenerated media and manifest, link the test and its baselines in
 the PR, and embed the GIF with a link to the MP4 if GitHub video attachment upload
 is unavailable. The manifest identifies the source commit used for recording;
 the subsequent media-only commit does not change the tested code or baselines.

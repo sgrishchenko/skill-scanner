@@ -14,6 +14,7 @@ export class LocalApp {
     this.env = {
       ...process.env,
       SKILL_SCANNER_HISTORY_DIR: this.history,
+      SKILL_SCANNER_STARRED_DIR: testInfo.outputPath('state', 'starred'),
       SKILL_SCANNER_CACHE_DIR: testInfo.outputPath('state', 'cache'),
       // Browser scan requests are intercepted. Also prevent an accidental
       // server-side request from reaching GitHub if that interception regresses.
@@ -63,7 +64,15 @@ export class LocalApp {
   }
 
   recent() {
-    return execFileSync(binary, ['recent'], { env: this.env, encoding: 'utf8', timeout: 10_000 });
+    return this.cli('recent');
+  }
+
+  starred() {
+    return this.cli('starred');
+  }
+
+  cli(...args) {
+    return execFileSync(binary, args, { env: this.env, encoding: 'utf8', timeout: 10_000 });
   }
 }
 
