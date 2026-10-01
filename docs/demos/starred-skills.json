@@ -1,0 +1,21 @@
+{
+  "tested_revision": "c6eadbe03868b1e000f5db71023c8c1bf9fcb93d",
+  "environment": "mcr.microsoft.com/playwright:v1.63.0-noble (linux/amd64)",
+  "result": "passed",
+  "baseline_updates": "none",
+  "checkpoints": [
+    "01-unstarred-results",
+    "02-star-skill",
+    "03-starred-only-filter",
+    "04-stars-across-repositories",
+    "05-restart-persistence",
+    "06-rescan-keeps-stars",
+    "07-unstar-from-results",
+    "08-unstar-from-list",
+    "09-unstar-persists-after-restart"
+  ],
+  "sha256": {
+    "mp4": "aed220fab394d962c6518df3f19bfe7747124819c173332c591f5651a0621cf5",
+    "gif": "f6cc097da6a418e4313c81a4bb67a7ab56d387938bd5b6857c3b6de26547e2ad"
+  }
+}
