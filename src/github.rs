@@ -270,11 +270,21 @@ impl GitHubClient {
         repository: &Repository,
         sha: &str,
     ) -> Result<BlobContent, ScanError> {
+        self.blob_up_to(repository, sha, MAX_SKILL_BYTES)
+    }
+
+    /// Download a file of at most `max_bytes`; larger files are not decoded.
+    pub(crate) fn blob_up_to(
+        &self,
+        repository: &Repository,
+        sha: &str,
+        max_bytes: u64,
+    ) -> Result<BlobContent, ScanError> {
         let blob: Blob = self.json(self.url(repository, &["git", "blobs", sha]))?;
         if blob.sha != sha {
             return Err(ScanError::new("GitHub returned a different file object; the inventory is incomplete. Retry the scan."));
         }
-        if blob.size > MAX_SKILL_BYTES {
+        if blob.size > max_bytes {
             return Ok(BlobContent::TooLarge);
         }
         if blob.encoding != "base64" {
@@ -286,7 +296,7 @@ impl GitHubClient {
             .filter(|byte| !byte.is_ascii_whitespace())
             .collect();
         // Limit allocation even if the API's declared file size is inconsistent.
-        if compact.len() as u64 > MAX_SKILL_BYTES.div_ceil(3) * 4 {
+        if compact.len() as u64 > max_bytes.div_ceil(3) * 4 {
             return Err(ScanError::new("GitHub returned inconsistent file size data; the inventory is incomplete. Retry the scan."));
         }
         let bytes = STANDARD.decode(compact).map_err(|_| {

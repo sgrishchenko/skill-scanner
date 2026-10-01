@@ -181,7 +181,7 @@ impl StarredSkills {
 }
 
 /// Accept only repository-relative SKILL.md paths that a scan can report.
-fn validate_path(path: &str) -> io::Result<()> {
+pub(crate) fn validate_path(path: &str) -> io::Result<()> {
     if path.is_empty()
         || path.len() > MAX_PATH_BYTES
         || !(path == "SKILL.md" || path.ends_with("/SKILL.md"))
@@ -196,7 +196,7 @@ fn validate_path(path: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn valid_commit(commit: &str) -> bool {
+pub(crate) fn valid_commit(commit: &str) -> bool {
     matches!(commit.len(), 40 | 64)
         && commit
             .bytes()

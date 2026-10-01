@@ -7,7 +7,8 @@ use std::{
 use clap::Parser;
 use skill_scanner::{
     cache::ScanCache,
-    cli::{Cli, Command, RecentAction, StarredAction},
+    cli::{Cli, CodexAction, Command, RecentAction, StarredAction},
+    codex::{CodexError, CodexSkills},
     github::GitHubClient,
     organization,
     recent::RecentRepositories,
@@ -29,6 +30,9 @@ fn main() -> ExitCode {
         }
         | Command::Starred {
             action: Some(StarredAction::Remove { repository, .. }),
+        }
+        | Command::Codex {
+            action: Some(CodexAction::Install { repository, .. }),
         } => match repository.parse::<Repository>() {
             Ok(repository) => Some(repository),
             Err(error) => {
@@ -39,7 +43,10 @@ fn main() -> ExitCode {
         Command::Serve { .. }
         | Command::ScanOrg { .. }
         | Command::Recent { action: None }
-        | Command::Starred { action: None } => None,
+        | Command::Starred { action: None }
+        | Command::Codex {
+            action: None | Some(CodexAction::Remove { .. }),
+        } => None,
     };
     let owner = match &command {
         Command::ScanOrg { organization } => match organization.parse::<Owner>() {
@@ -80,6 +87,36 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         };
+    }
+    let codex = CodexSkills::from_environment();
+    match &command {
+        Command::Codex { action: None } => {
+            let result = codex.list().and_then(|skills| {
+                report::write_codex(io::stdout().lock(), &skills, codex.directory())
+            });
+            return match result {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+                Err(_) => codex_failure(&CodexError::Storage(io::ErrorKind::Other.into())),
+            };
+        }
+        Command::Codex {
+            action: Some(CodexAction::Remove { name }),
+        } => {
+            return match codex.remove(name) {
+                Ok(removed) => {
+                    let message = if removed.is_some() {
+                        format!("Removed {name} from Codex skills.")
+                    } else {
+                        format!("No Codex skill named {name} is installed; nothing was removed.")
+                    };
+                    let _ = writeln!(io::stdout().lock(), "{message}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => codex_failure(&error),
+            };
+        }
+        _ => {}
     }
     let recent = RecentRepositories::from_environment();
     if let Command::Recent { action } = command {
@@ -135,6 +172,13 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         };
+    }
+    if let Command::Codex {
+        action: Some(CodexAction::Install { path, .. }),
+    } = &command
+    {
+        let repository = repository.expect("install command has a repository");
+        return install(&client, &codex, &repository, path);
     }
     if let Some(owner) = owner {
         return scan_organization(&client, &owner);
@@ -219,4 +263,42 @@ fn scan_organization(client: &GitHubClient, owner: &Owner) -> ExitCode {
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
+}
+
+fn install(
+    client: &GitHubClient,
+    codex: &CodexSkills,
+    repository: &Repository,
+    path: &str,
+) -> ExitCode {
+    let result = codex.install(client, repository, path, None, |progress| {
+        let _ = report::write_install_progress(&mut io::stderr().lock(), progress);
+    });
+    match result {
+        Ok(installation) => {
+            let _ = writeln!(
+                io::stdout().lock(),
+                "Installed {} for Codex in {} ({} file{} from {repository} at commit {}).",
+                installation.skill.name,
+                report::terminal_text(&installation.directory.to_string_lossy()),
+                installation.files,
+                if installation.files == 1 { "" } else { "s" },
+                installation.skill.commit,
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => codex_failure(&error),
+    }
+}
+
+fn codex_failure(error: &CodexError) -> ExitCode {
+    let _ = writeln!(
+        io::stderr().lock(),
+        "error: {}",
+        report::terminal_text(&error.to_string())
+    );
+    match error {
+        CodexError::Invalid(_) => ExitCode::from(2),
+        _ => ExitCode::FAILURE,
+    }
 }

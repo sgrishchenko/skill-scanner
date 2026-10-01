@@ -1,0 +1,50 @@
+[
+  {
+    "repository": "example/review-tools",
+    "scanned_at": 1788264000000,
+    "skills": [
+      {
+        "name": "code-review",
+        "description": "Review changes for correctness and maintainability.",
+        "path": "skills/code-review/SKILL.md"
+      },
+      {
+        "name": "test-plan",
+        "description": "Plan focused tests for the behavior being changed.",
+        "path": "skills/test-plan/SKILL.md"
+      }
+    ]
+  },
+  {
+    "repository": "example/release-tools",
+    "scanned_at": 1788264300000,
+    "skills": [
+      {
+        "name": "code-review",
+        "description": "Check release branches before tagging.",
+        "path": "skills/code-review/SKILL.md"
+      },
+      {
+        "name": "release-notes",
+        "description": "Summarize changes for a release.",
+        "path": "skills/release-notes/SKILL.md"
+      }
+    ]
+  },
+  {
+    "repository": "example/release-tools",
+    "scanned_at": 1788264600000,
+    "skills": [
+      {
+        "name": "code-review",
+        "description": "Check release branches before tagging.",
+        "path": "skills/code-review/SKILL.md"
+      },
+      {
+        "name": "release-notes",
+        "description": "Summarize changes for a release.",
+        "path": "skills/release-notes/SKILL.md"
+      }
+    ]
+  }
+]

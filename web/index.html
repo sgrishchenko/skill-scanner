@@ -56,6 +56,13 @@
           <p id="starred-error" class="error-panel" role="alert" hidden></p>
           <ul id="starred-list" class="recent-list"></ul>
         </section>
+        <section class="recent-section" aria-labelledby="codex-title">
+          <div class="recent-heading"><h3 id="codex-title" tabindex="-1">Codex skills</h3></div>
+          <p id="codex-hint" class="recent-hint codex-hint">Install skills from the results to use them in Codex.</p>
+          <p id="codex-status" class="recent-hint" role="status" aria-live="polite">Loading Codex skills…</p>
+          <p id="codex-error" class="error-panel" role="alert" hidden></p>
+          <ul id="codex-list" class="recent-list"></ul>
+        </section>
         <noscript><p class="error-panel">Enable JavaScript to scan repositories in this interface, or use <code>skill-scanner scan OWNER/REPO</code> in a terminal.</p></noscript>
         <div id="error" class="error-panel" role="alert" tabindex="-1" hidden><strong>Scan couldn’t finish</strong><p id="error-message"></p></div>
         <div id="progress-panel" class="progress-panel" hidden>
@@ -72,7 +79,7 @@
             <div class="file-illustration" aria-hidden="true"><div class="file-back"></div><div class="file-front"><span>✳</span><b>SKILL.md</b><i></i><i></i></div><span class="file-plus">+</span></div>
             <h3>A repository of possibilities</h3>
             <p>Enter a repository or organization above to discover its skills.<br> Names, descriptions, and source links will appear here.</p>
-            <span class="empty-note"><span class="dot"></span>Read-only discovery. Nothing is installed or run.</span>
+            <span class="empty-note"><span class="dot"></span>Nothing is run. Skills are installed only when you ask.</span>
           </div>
 
           <div id="scan-results" hidden>
@@ -115,11 +122,11 @@
             <li><span>2</span><div><h3>Read the details</h3><p>Names and descriptions come from each file’s YAML metadata.</p></div></li>
             <li><span>3</span><div><h3>Explore the source</h3><p>Every result links to the exact commit we scanned on GitHub.</p></div></li>
           </ol>
-          <div class="guide-note"><span aria-hidden="true">ⓘ</span><p>Discovery is a starting point. Review a skill’s source before deciding to use it.</p></div>
+          <div class="guide-note"><span aria-hidden="true">ⓘ</span><p>Discovery is a starting point. Review a skill’s source before installing or using it.</p></div>
           <details class="access-help"><summary>About GitHub access</summary><p>Public repositories work without credentials, within GitHub’s API limits. For higher limits, set <code>GITHUB_TOKEN</code> before starting the app. The token stays on this machine.</p><p>Organization scans make at least two requests per repository, so set a token for larger organizations. Very large repositories must be scanned individually.</p><p>One scan runs at a time. Closing this page discards its results; a running scan finishes in the background.</p></details>
         </aside>
       </div>
     </main>
-    <footer><span>Built for the curious.</span><span>Public GitHub repositories<span class="footer-dot">·</span>Read-only by design</span></footer>
+    <footer><span>Built for the curious.</span><span>Public GitHub repositories<span class="footer-dot">·</span>Nothing runs on its own</span></footer>
   </body>
 </html>

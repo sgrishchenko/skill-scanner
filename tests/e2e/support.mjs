@@ -11,10 +11,12 @@ const binary = path.join(root, 'target/debug/skill-scanner');
 export class LocalApp {
   constructor(testInfo) {
     this.history = testInfo.outputPath('state', 'recent');
+    this.codexDirectory = testInfo.outputPath('state', 'codex');
     this.env = {
       ...process.env,
       SKILL_SCANNER_HISTORY_DIR: this.history,
       SKILL_SCANNER_STARRED_DIR: testInfo.outputPath('state', 'starred'),
+      SKILL_SCANNER_CODEX_SKILLS_DIR: this.codexDirectory,
       SKILL_SCANNER_CACHE_DIR: testInfo.outputPath('state', 'cache'),
       // Browser scan requests are intercepted. Also prevent an accidental
       // server-side request from reaching GitHub if that interception regresses.
@@ -69,6 +71,10 @@ export class LocalApp {
 
   starred() {
     return this.cli('starred');
+  }
+
+  codex() {
+    return this.cli('codex');
   }
 
   cli(...args) {
@@ -136,8 +142,8 @@ function ndjson(events) {
   return events.map((event) => JSON.stringify(event)).join('\n') + '\n';
 }
 
-export async function mockScans(context, app) {
-  const scans = await interceptScans(context, app, '/api/scan', 'scans.json');
+export async function mockScans(context, app, fixtureFile = 'scans.json') {
+  const scans = await interceptScans(context, app, '/api/scan', fixtureFile);
   return {
     requests: scans.requests,
     unexpected: scans.unexpected,
@@ -191,6 +197,53 @@ export async function mockOrganizationScans(context, app) {
     async complete() {
       const { route, fixture } = await scans.next((fixture) => ({ organization: fixture.organization }));
       await route.fulfill({ contentType: 'application/x-ndjson', body: ndjson(fixture.events) });
+    },
+  };
+}
+
+// Installing downloads files from GitHub, so only the listed installs are
+// mocked: each response is held until the test has asserted the pending state,
+// and the installed folder is written as the server would write it. Other
+// install requests, such as name conflicts, reach the actual server, and
+// listing, removal, restarts, and the CLI use the real binary and disk state.
+// Rust tests independently cover downloading and publishing installations.
+export async function mockCodexInstalls(context, app, installs) {
+  const pending = [];
+  const requests = [];
+  await context.route((url) => url.pathname === '/api/codex/install', async (route) => {
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    if (installs.some((install) => install.repository === body.repository && install.path === body.path)) {
+      pending.push(route);
+    } else {
+      await route.fallback();
+    }
+  });
+  return {
+    requests,
+    async complete(install) {
+      await expect.poll(() => pending.length).toBe(1);
+      const route = pending.shift();
+      const request = route.request();
+      expect(request.method()).toBe('POST');
+      expect(request.headers()['x-skill-scanner']).toBe('1');
+      expect(request.postDataJSON()).toEqual({ repository: install.repository, path: install.path, commit: install.commit });
+      const folder = path.join(app.codexDirectory, install.name);
+      await mkdir(folder, { recursive: true });
+      await writeFile(path.join(folder, 'SKILL.md'), `---\nname: ${install.name}\ndescription: ${install.description}\n---\n`);
+      await writeFile(path.join(folder, '.skill-scanner.json'), JSON.stringify({
+        format_version: 1, repository: install.repository, path: install.path,
+        commit: install.commit, installed_at: install.installed_at,
+      }));
+      const skill = {
+        name: install.name, repository: install.repository, path: install.path, commit: install.commit,
+        link: `https://github.com/${install.repository}/blob/${install.commit}/${install.path}`,
+        installed_at: install.installed_at,
+      };
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ skill, files: 1 }) });
+    },
+    assertFinished() {
+      expect(pending).toHaveLength(0);
     },
   };
 }

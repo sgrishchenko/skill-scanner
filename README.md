@@ -14,14 +14,18 @@ skill-scanner recent
 skill-scanner recent remove OWNER/REPO
 skill-scanner starred
 skill-scanner starred remove OWNER/REPO PATH
+skill-scanner codex
+skill-scanner codex install OWNER/REPO PATH
+skill-scanner codex remove NAME
 skill-scanner --help
 skill-scanner --version
 ```
 
 The scanner resolves the default branch to one commit, discovers skills, reads
 YAML `name` and `description` fields, and prints links to their source at that
-commit. It never runs repository scripts or skill instructions, installs skills,
-or follows symlinks or submodules. It uses GitHub's API without requiring Git.
+commit. It never runs repository scripts or skill instructions, or follows
+symlinks or submodules, and installs a skill for Codex only when you ask. It uses
+GitHub's API without requiring Git.
 
 ## Install
 
@@ -174,6 +178,39 @@ disable starring. Stars are independent of history and the cache; removing a
 recent repository or clearing the cache keeps them. See the
 [starred skills spec](spec/features/starred-skills.md) for details.
 
+## Codex skills
+
+Select **Install for Codex** on a skill card to copy that skill into the
+directory where Codex discovers
+personal skills, `~/.agents/skills/NAME` (`%USERPROFILE%\.agents\skills\NAME`
+on Windows). The web interface installs the commit you scanned. **Codex skills**
+in the scan form lists what Skill Scanner installed, with **Remove** buttons;
+**Remove from Codex** on the card works too. Codex picks up new skills
+automatically; restart it if one does not appear.
+
+From the terminal (installing uses GitHub; listing and removal do not):
+
+```sh
+skill-scanner codex install OWNER/REPO skills/code-review/SKILL.md
+skill-scanner codex
+skill-scanner codex remove code-review
+```
+
+`NAME` is the directory containing the skill's `SKILL.md`, or the repository
+name for a root-level skill. Installing copies that directory's regular files,
+keeping scripts executable, but not nested skills, symlinks, or submodules,
+and never runs anything; review a skill's source first. Skills over 1000 files
+or 16 MiB, or with file names that are not portable across platforms, cannot be
+installed. Each installed folder records its source in `.skill-scanner.json`.
+Skill Scanner only replaces or removes folders it installed: a folder you
+created, or one installed from another repository under the same name, is a
+conflict until you remove it. Reinstalling the same skill replaces its folder,
+including any local edits.
+
+Set `SKILL_SCANNER_CODEX_SKILLS_DIR` to use another directory, or set it to an
+empty value to disable installation. See the
+[Codex skills spec](spec/features/codex-skills.md) for details.
+
 ## Analysis cache
 
 The CLI and web server automatically share a persistent cache of analyzed
@@ -306,8 +343,8 @@ metadata warnings; API responses over 32 MiB fail the scan.
 The input accepts `owner/repo` or an HTTPS `github.com` repository URL with an
 optional `.git` suffix or trailing slash; `scan-org` accepts `OWNER` or
 `https://github.com/OWNER`. Branch/file URLs, local repositories, arbitrary
-repository lists, installation, execution, and CLI JSON export are outside this
-version's scope.
+repository lists, installation for agents other than Codex, execution, and CLI
+JSON export are outside this version's scope.
 
 ## Development
 
@@ -324,10 +361,10 @@ compatible with Rust 1.84 (0.8.3 incorrectly uses a newer standard-library API).
 
 Modules separate argument parsing, repository input, GitHub transport, discovery,
 organization scans, analysis caching, recent repositories, starred skills,
-metadata, terminal rendering, and the web server. Browser assets live in `web/`.
+Codex installation, metadata, terminal rendering, and the web server. Browser assets live in `web/`.
 The optional [browser E2E suite](tests/e2e/README.md) uses pinned Playwright
 tooling and screenshot baselines to reproduce the recent repositories, starred
-skills, and organization scan demos.
+skills, organization scan, and Codex skills demos.
 It runs in CI and uses mocked scan responses with isolated local storage.
 See the [feature specification index](spec/README.md) for behavior and acceptance
 checks, and [implementation decisions](spec/implementation.md) for architecture

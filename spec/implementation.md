@@ -97,6 +97,24 @@ environment; web list, star, and unstar operations run on `spawn_blocking`.
 The [starred skills feature](features/starred-skills.md) defines locations,
 validation, and error behavior.
 
+## Codex installation
+
+Keep Codex directory selection, installation records, downloading, and
+publishing in `codex`, separate from the state stores in `storage`. CLI and web
+entry points configure `CodexSkills` from the environment. Installation reuses
+the blocking `GitHubClient`, the scanner's tree validation and regular-file
+rule, and the starred skill path and commit validation; it walks the pinned
+tree to the skill directory and downloads blobs with a shared size budget.
+Each installed folder carries its own versioned `.skill-scanner.json` record
+instead of a separate index, so the directory itself is the source of truth
+and folders created by people or other tools are recognized as unowned.
+Files are staged in a hidden sibling folder and published with one rename;
+replacement renames the old folder aside first and restores it on failure.
+Web install and removal run on `spawn_blocking` behind their own one-permit
+semaphore, so they neither wait for nor block scans. The
+[Codex skills feature](features/codex-skills.md) defines locations, limits,
+ownership, and error behavior.
+
 ## Shared aggregation
 
 Implement [similarity grouping](features/similarity-grouping.md) in shared Rust
@@ -135,6 +153,7 @@ real credentials.
 | Analysis cache | Temporary directories and mocked HTTP verify persisted reuse, commit invalidation, cross-interface sharing, warnings, corrupt entries, failed refreshes, and unavailable storage |
 | Recent repositories | Temporary storage and mock scans verify ordering, deduplication, successful-only recording, concurrent writes, corruption handling, cross-interface persistence, and removal; subprocess tests verify offline CLI use |
 | Starred skills | Temporary storage verifies identity, validation, ordering, concurrent writes, corruption handling, and unavailable or disabled storage; in-process HTTP and subprocess tests verify the API, request protections, cross-interface persistence, and offline CLI use |
+| Codex skills | Mocked HTTP and temporary directories verify copied files, executable modes, excluded entries, replacement, conflicts before network access, limits, unportable names, failed downloads, ownership records, and removal; in-process HTTP and subprocess tests verify the API, request protections, one change at a time, and offline CLI listing and removal |
 | CLI | Subprocess tests verify exit codes and stdout/stderr separation |
 | Web API and scan lifecycle | In-process HTTP tests exercise the real scanner against mocked GitHub responses, including streaming, warnings, errors, empty results, concurrency, disconnects, input/body limits, and Host/Origin checks |
 | Embedded server | CLI subprocess tests start the site from another working directory and check port errors |
@@ -142,8 +161,9 @@ real credentials.
 
 The [browser E2E suite](../tests/e2e/README.md) runs the rebuilt executable in a
 pinned Playwright Linux container, with fixed repository and organization scan
-fixtures and isolated history, starred, and cache directories. Recent-list/removal
-and starred-skill requests and CLI history and starred reads use the actual
-application. CI checks reviewed screenshot baselines without updates and
+fixtures and isolated history, starred, Codex, and cache directories.
+Recent-list/removal, starred-skill, and Codex list/removal/conflict requests and
+CLI history, starred, and Codex reads use the actual application; only
+GitHub-dependent installs are mocked. CI checks reviewed screenshot baselines without updates and
 retains reports, videos, and failure artifacts. Demo exports use the video
 attachment from that same passing test execution.
