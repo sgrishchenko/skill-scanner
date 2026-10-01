@@ -7,6 +7,7 @@ behavior and compares named screenshots against reviewed baselines:
 | --- | --- | --- |
 | [Recent repositories](recent-repositories.spec.mjs) | [Nine screenshots](snapshots/recent-repositories.spec.mjs) | [Recording](../../docs/demos/recent-repositories.md) |
 | [Starred skills](starred-skills.spec.mjs) | [Nine screenshots](snapshots/starred-skills.spec.mjs) | [Recording](../../docs/demos/starred-skills.md) |
+| [Organization scan](organization-scan.spec.mjs) | [Five screenshots](snapshots/organization-scan.spec.mjs) | Not yet recorded |
 
 The demos follow the
 [PR demonstration requirements](../../CONTRIBUTING.md#visual-feature-demonstrations).
@@ -30,17 +31,21 @@ docker run --rm --init --ipc=host --platform linux/amd64 \
 ```
 
 Always rebuild first, including after browser asset changes. Each test starts
-`target/debug/skill-scanner` on an available loopback port and restarts it on
-newly allocated ports. Each test gets history, starred, and cache directories
-under its own Playwright output directory. Tokens are removed from child process
+`target/debug/skill-scanner` on an available loopback port; the recent
+repositories and starred skills tests restart it on newly allocated ports. Each
+test gets history, starred, and cache directories under its own Playwright
+output directory. Tokens are removed from child process
 environments. External browser requests are blocked and fail the test; a dead
 proxy also prevents accidental server-side GitHub access.
 
 Only `/api/scan` responses and their successful-scan history writes are mocked
-using [fixed fixtures](fixtures/scans.json). The embedded browser assets,
-`/api/recent`, `/api/recent/remove`, `/api/starred` and its add/remove routes,
-disk persistence, `skill-scanner recent`, and `skill-scanner starred` run
-unchanged. This tests the browser workflow and shared history, while
+using [fixed fixtures](fixtures/scans.json), and `/api/scan-org` responses use
+complete [organization event streams](fixtures/organization-scans.json) without
+history writes. Each test treats the other scan route as an unexpected request.
+The embedded browser assets, `/api/recent`, `/api/recent/remove`, `/api/starred`
+and its add/remove routes, disk persistence, `skill-scanner recent`, and
+`skill-scanner starred` run unchanged. This tests the browser workflow and
+shared history, while
 [Rust scan tests](../../src/recent_scan_tests.rs) independently verify actual
 scanner recording behavior with mocked GitHub responses.
 
@@ -81,6 +86,19 @@ The recent repositories checkpoints are:
 
 The test also checks disabled recent controls during scans, the exact scan
 request sequence, absence of external requests, and absence of JavaScript errors.
+
+The organization scan checkpoints are:
+
+| Screenshot | Behavior asserted before comparison |
+| --- | --- |
+| `01-organization-mode` | Toggle switches the heading, label, placeholder, hint, and examples; an example fills and focuses the field without scanning |
+| `02-scanning-organization` | Pending scan disables the field, mode toggle, examples, and submission and hides results |
+| `03-organization-results` | Combined results list the failed repository first, repositories with skills and pinned commits, and a cross-repository similar group; recent repositories stay empty |
+| `04-filter-by-repository` | Starring an organization skill records its own repository, relative path, and commit in the list and CLI; repositories without skills expand; searching a repository path filters members while statistics stay unchanged |
+| `05-rate-limit-stops-scan` | A rate limit shows the stopping diagnostic, restores the form, and shows no partial results |
+
+It also checks the request bodies, a return to repository mode, absence of
+external requests, and absence of JavaScript errors.
 Error/recovery and mobile scenarios are outside this demo's sequence; their
 broader acceptance requirements remain in the feature spec.
 
@@ -111,14 +129,16 @@ export each demo from that run:
 ```sh
 npm run demo --prefix tests/e2e -- recent-repositories
 npm run demo --prefix tests/e2e -- starred-skills
+npm run demo --prefix tests/e2e -- organization-scan
 ```
 
 The exporter requires a clean tested commit, every test passing with no
-retries/skips, exactly one test in the named spec with all nine screenshot
-checkpoints, and baseline updates disabled. It converts that test's video
-attachment into the checked-in MP4 and animated GIF, without changing the
-sequence, and writes a manifest with the tested revision, environment,
-checkpoint names, and media hashes. It accepts Docker report paths.
+retries/skips, exactly one test in the named spec with all of its screenshot
+checkpoints (five for the organization scan, nine for the others), and baseline
+updates disabled. It converts that test's video attachment into the checked-in
+MP4 and animated GIF, without changing the sequence, and writes a manifest with
+the tested revision, environment, checkpoint names, and media hashes. It
+accepts Docker report paths.
 Do not export a baseline-generation run or a separate recording script.
 
 Commit the regenerated media and manifest, link the test and its baselines in

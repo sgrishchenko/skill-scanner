@@ -8,7 +8,9 @@ of complete public-repository analyses through the
 
 1. On every scan, fetch repository details, require a public repository, and
    resolve its current default branch to a commit under the existing
-   [repository access](repository-access.md) rules. Cached results never bypass
+   [repository access](repository-access.md) rules.
+   [Organization scans](organization-scan.md) take the details from the owner's
+   current repository listing and share entries with repository scans. Cached results never bypass
    these checks, including after a default-branch change.
 2. Look up the repository by case-insensitive owner and name. Supported URL,
    identifier, `.git`, and trailing-slash forms share an entry. Different

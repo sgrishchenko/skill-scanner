@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { LocalApp, mockScans } from './support.mjs';
+import { LocalApp, checkpoint as compare, mockScans } from './support.mjs';
 
 test('recent repositories persist, update, and can be removed without losing results', async ({ page, context }, testInfo) => {
   const app = new LocalApp(testInfo);
@@ -10,15 +10,7 @@ test('recent repositories persist, update, and can be removed without losing res
   const input = page.getByRole('textbox', { name: 'GitHub repository' });
   const scan = page.getByRole('button', { name: 'Scan repository', exact: true });
 
-  async function checkpoint(name) {
-    await page.locator('.scan-panel').evaluate((panel) => window.scrollTo(0, panel.offsetTop - 24));
-    await page.mouse.move(0, 0);
-    await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true });
-    testInfo.annotations.push({ type: 'checkpoint', description: name });
-    // Assertions above determine readiness. This pause only makes the same
-    // passing test's video readable; it is never used to synchronize the UI.
-    await page.waitForTimeout(1_200);
-  }
+  const checkpoint = (name) => compare(page, testInfo, name);
 
   async function scanning(expectedRequests) {
     await expect.poll(() => mock.requests.length).toBe(expectedRequests);

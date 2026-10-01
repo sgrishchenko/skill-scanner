@@ -10,6 +10,7 @@ Status: implemented. This internal HTTP contract serves the
 | `GET /` | Embedded HTML |
 | `GET /app.css`, `GET /app.js`, `GET /favicon.svg` | Embedded assets with appropriate MIME types |
 | `POST /api/scan` | Validate one repository and stream scan events |
+| `POST /api/scan-org` | Validate one organization or user and stream [organization scan](#organization-scans) events |
 | `GET /api/recent` | List saved successful scans, newest first |
 | `POST /api/recent/remove` | Remove one repository from the recent list |
 | `GET /api/starred` | List starred skills, newest first |
@@ -103,6 +104,32 @@ An HTTP success status without a completion event is not a successful scan.
 [Web scan lifecycle](web-scan.md#concurrency-and-state) defines concurrency,
 disconnection, and page state.
 
+## Organization scans
+
+`POST /api/scan-org` uses the same headers, 4 KiB limit, Host/Origin checks,
+error statuses, and one-scan semaphore as `/api/scan`, with one owner field:
+
+```json
+{"organization":"example"}
+```
+
+It applies the [organization input](organization-scan.md#input-and-listing)
+validation and streams the same event types. Listing progress has null counters.
+Each repository's progress and all of its nested progress carry that
+repository's one-based `current` and the repository `total`; nested messages are
+prefixed with the repository, such as
+`example/tools: Scanning skill [1/2]: skills/review/SKILL.md`. A scan stopped by
+credential, rate-limit, or connection failures ends with an `error` event.
+History warnings do not occur because organization scans do not record recent
+repositories.
+
+The `complete` event's inventory contains `organization` (GitHub's spelling of
+the owner), `repositories`, `skipped_forks`, `skills`, and `aggregation`. Each
+repository has `repository`, `commit` (null when empty or failed),
+`skill_count`, and `error` (null unless that repository failed). Skills and
+aggregation use the schema below; skill paths are prefixed with
+`owner/repository/` and aggregation spans all repositories.
+
 ## Inventory and aggregation
 
 The inventory contains `repository` (normalized string), `commit` (full SHA or
@@ -132,4 +159,6 @@ denominator, with zero for an empty scan. See
 - Inventory responses preserve warnings, empty repositories, and every skill's
   membership in exactly one aggregation group.
 - Concurrent scans receive HTTP 409, including while a disconnected worker
-  finishes its scan.
+  finishes its scan, across repository and organization routes.
+- Organization requests validate the owner field and stream repository-counted
+  progress before one combined inventory with per-repository outcomes.

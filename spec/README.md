@@ -1,8 +1,9 @@
 # Skill Scanner specification
 
 Status: implemented. Skill Scanner discovers the existing AI skills in one
-public GitHub repository so users can browse them in a terminal or local web
-interface and open their source files. A skill is a directory containing a
+public GitHub repository, or across an organization's or user's public
+repositories, so users can browse them in a terminal or local web interface and
+open their source files. A skill is a directory containing a
 regular file named exactly `SKILL.md`.
 
 ## Feature specifications
@@ -14,6 +15,7 @@ rules apply to both interfaces; interface documents link to those rules.
 | --- | --- |
 | [Repository access](features/repository-access.md) | Accepted inputs, public GitHub access, credentials, timeouts, retries, and API limits |
 | [Skill discovery](features/skill-discovery.md) | Default-branch snapshot, recursive discovery, progress, ordering, and scan completeness |
+| [Organization scan](features/organization-scan.md) | Owner input, public repository listing, forks, per-repository failures, and combined inventories |
 | [Analysis cache](features/analysis-cache.md) | Persistent shared analyses, commit validation, invalidation, storage, and cache failures |
 | [Recent repositories](features/recent-repositories.md) | Shared persistent recent list, completion times, selection, and removal |
 | [Starred skills](features/starred-skills.md) | Persistent stars shared by both interfaces, the starred list and filter, and unstarring |
@@ -31,7 +33,8 @@ verification approach supporting these features.
 
 ## Product boundaries
 
-- Scan one public GitHub repository per invocation, using its default branch.
+- Scan one public GitHub repository per invocation, using its default branch,
+  or every public non-fork repository owned by one organization or user.
 - Discover skills at the repository root and recursively in all directories,
   including hidden directories, without restricting discovery to tool-specific
   paths.
@@ -40,7 +43,7 @@ verification approach supporting these features.
 - Read repository content without executing scripts or skill instructions.
   Discovery does not certify a skill's validity, compatibility, or safety.
 
-Private repositories, multi-repository and organization-wide scans, local
+Private repositories, arbitrary multi-repository selections, local
 repository inputs, branch/tag/commit selection, Git history, submodule contents,
 and other agent configuration formats such as `AGENTS.md` and Cursor rules are
 outside the supported scope. Skill installation/execution and quality or

@@ -10,6 +10,12 @@ Status: implemented. The [local web server](local-web-server.md) uses the same
    whitespace before applying the shared
    [repository validation](repository-access.md#repository-input). Example
    buttons fill the field; scanning starts only on form submission.
+   The **Repository** / **Organization** toggle switches the form to an
+   [organization scan](organization-scan.md): the heading, field label,
+   placeholder, hint, examples, and submit button change, and submission uses
+   the [organization route](web-scan-api.md#organization-scans). Switching modes
+   keeps the field value and does not scan. Selecting a recent repository
+   returns to repository mode. The toggle is disabled while scanning.
 2. Submit **Scan repository**. Clear the previous inventory and filters, reset
    the results view, and disable the form during the request.
 3. Announce actual progress for repository resolution, default branch,
@@ -19,7 +25,8 @@ Status: implemented. The [local web server](local-web-server.md) uses the same
    files already read.
    A [cache hit](analysis-cache.md#progress-and-web-lifecycle) announces the
    reused commit after online validation, with indeterminate progress until
-   completion and no per-skill counters.
+   completion and no per-skill counters. Organization scans count repositories
+   already finished and show each repository's current step.
 4. Require a completion event before presenting the full
    [results](web-results.md). An HTTP success status alone is insufficient.
    Never show a partial inventory.
@@ -73,5 +80,8 @@ server job IDs, polling endpoints, and a database remain outside scope.
 - Starting another scan resets the view and filters; reloading clears results.
 - A cached scan announces reuse and renders the same full results and warnings
   as a fresh scan; reloading still requires another submission and validation.
+- Organization mode changes the form without scanning, disables its controls
+  while scanning, renders combined results, and shows a stopped scan as a
+  failure without partial results.
 
 - The recent repository list follows its [acceptance checks](recent-repositories.md#acceptance-checks), including persistence and removal across runs.

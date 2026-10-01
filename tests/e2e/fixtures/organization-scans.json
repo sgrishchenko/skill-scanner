@@ -1,0 +1,193 @@
+[
+  {
+    "organization": "https://github.com/example",
+    "events": [
+      {
+        "type": "progress",
+        "message": "Listing public repositories: example (page 1)",
+        "current": null,
+        "total": null
+      },
+      {
+        "type": "progress",
+        "message": "Scanning repository [1/5]: example/agent-tools",
+        "current": 1,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "example/agent-tools: Resolving default branch: main",
+        "current": 1,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "Scanning repository [2/5]: example/docs-site",
+        "current": 2,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "example/docs-site: Resolving default branch: main",
+        "current": 2,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "Scanning repository [3/5]: example/huge-monorepo",
+        "current": 3,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "example/huge-monorepo: Resolving default branch: main",
+        "current": 3,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "Scanning repository [4/5]: example/review-bot",
+        "current": 4,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "example/review-bot: Resolving default branch: main",
+        "current": 4,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "Scanning repository [5/5]: example/sandbox",
+        "current": 5,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "example/sandbox: Resolving default branch: main",
+        "current": 5,
+        "total": 5
+      },
+      {
+        "type": "complete",
+        "inventory": {
+          "organization": "example",
+          "repositories": [
+            {
+              "repository": "example/agent-tools",
+              "commit": "1111111111111111111111111111111111111111",
+              "skill_count": 2,
+              "error": null
+            },
+            {
+              "repository": "example/docs-site",
+              "commit": "2222222222222222222222222222222222222222",
+              "skill_count": 0,
+              "error": null
+            },
+            {
+              "repository": "example/huge-monorepo",
+              "commit": null,
+              "skill_count": 0,
+              "error": "GitHub truncated this repository's file listing. Organization scans do not walk every directory of very large repositories; scan this repository individually."
+            },
+            {
+              "repository": "example/review-bot",
+              "commit": "3333333333333333333333333333333333333333",
+              "skill_count": 1,
+              "error": null
+            },
+            {
+              "repository": "example/sandbox",
+              "commit": null,
+              "skill_count": 0,
+              "error": null
+            }
+          ],
+          "skipped_forks": 2,
+          "skills": [
+            {
+              "name": "code-review",
+              "description": "Review changes for correctness and maintainability.",
+              "path": "example/agent-tools/skills/code-review/SKILL.md",
+              "link": "https://github.com/example/agent-tools/blob/1111111111111111111111111111111111111111/skills/code-review/SKILL.md",
+              "warnings": []
+            },
+            {
+              "name": "release-notes",
+              "description": "Summarize changes for a release.",
+              "path": "example/agent-tools/skills/release-notes/SKILL.md",
+              "link": "https://github.com/example/agent-tools/blob/1111111111111111111111111111111111111111/skills/release-notes/SKILL.md",
+              "warnings": []
+            },
+            {
+              "name": "Code Review",
+              "description": "Review pull requests before they merge.",
+              "path": "example/review-bot/.agents/skills/review/SKILL.md",
+              "link": "https://github.com/example/review-bot/blob/3333333333333333333333333333333333333333/.agents/skills/review/SKILL.md",
+              "warnings": []
+            }
+          ],
+          "aggregation": {
+            "statistics": {
+              "total_skills": 3,
+              "similar_groups": 1,
+              "grouped_skills": 2,
+              "standalone_skills": 1,
+              "largest_group": 2,
+              "skills_with_warnings": 0
+            },
+            "groups": [
+              {
+                "skill_indices": [
+                  0,
+                  2
+                ],
+                "skills_with_warnings": 0
+              },
+              {
+                "skill_indices": [
+                  1
+                ],
+                "skills_with_warnings": 0
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "organization": "https://github.com/example",
+    "events": [
+      {
+        "type": "progress",
+        "message": "Listing public repositories: example (page 1)",
+        "current": null,
+        "total": null
+      },
+      {
+        "type": "progress",
+        "message": "Scanning repository [1/5]: example/agent-tools",
+        "current": 1,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "example/agent-tools: Resolving default branch: main",
+        "current": 1,
+        "total": 5
+      },
+      {
+        "type": "progress",
+        "message": "Scanning repository [2/5]: example/docs-site",
+        "current": 2,
+        "total": 5
+      },
+      {
+        "type": "error",
+        "message": "Stopped at example/docs-site (repository 2 of 5): GitHub denied access or its API rate limit was reached; wait and retry, or set a valid GITHUB_TOKEN for higher public-repository limits. (HTTP 403)"
+      }
+    ]
+  }
+]
