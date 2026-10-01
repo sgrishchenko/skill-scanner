@@ -67,22 +67,34 @@ export class LocalApp {
   }
 }
 
-export async function mockScans(context, app) {
-  const fixtures = JSON.parse(await readFile(new URL('fixtures/scans.json', import.meta.url)));
+export async function checkpoint(page, testInfo, name) {
+  await page.locator('.scan-panel').evaluate((panel) => window.scrollTo(0, panel.offsetTop - 24));
+  await page.mouse.move(0, 0);
+  await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true });
+  testInfo.annotations.push({ type: 'checkpoint', description: name });
+  // Assertions before each checkpoint determine readiness. This pause only
+  // makes the same passing test's video readable; it never synchronizes the UI.
+  await page.waitForTimeout(1_200);
+}
+
+// Intercept one scan route, holding each response until the test has asserted
+// the scanning state. The other scan route and external requests are failures.
+async function interceptScans(context, app, pathname, fixtureFile) {
+  const fixtures = JSON.parse(await readFile(new URL(`fixtures/${fixtureFile}`, import.meta.url)));
+  const other = pathname === '/api/scan' ? '/api/scan-org' : '/api/scan';
   const pending = [];
   const requests = [];
   const unexpected = [];
-  let completed = 0;
+  const state = { completed: 0 };
 
   await context.route('**/*', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.origin !== app.url) {
+    if (url.origin !== app.url || url.pathname === other) {
       unexpected.push(request.url());
       await route.abort('blockedbyclient');
-    } else if (url.pathname === '/api/scan') {
+    } else if (url.pathname === pathname) {
       requests.push(request);
-      // Hold the response until the test has asserted the scanning state.
       pending.push(route);
     } else {
       await route.continue();
@@ -92,14 +104,37 @@ export async function mockScans(context, app) {
   return {
     requests,
     unexpected,
-    async complete() {
+    async next(body) {
       await expect.poll(() => pending.length).toBe(1);
       const route = pending.shift();
-      const fixture = fixtures[completed++];
+      const fixture = fixtures[state.completed++];
       expect(fixture, 'unexpected extra scan').toBeDefined();
       expect(route.request().method()).toBe('POST');
       expect(route.request().headers()['x-skill-scanner']).toBe('1');
-      expect(route.request().postDataJSON()).toEqual({ repository: fixture.repository });
+      expect(route.request().postDataJSON()).toEqual(body(fixture));
+      return { route, fixture };
+    },
+    assertFinished() {
+      expect(state.completed).toBe(fixtures.length);
+      expect(requests).toHaveLength(fixtures.length);
+      expect(pending).toHaveLength(0);
+      expect(unexpected).toEqual([]);
+    },
+  };
+}
+
+function ndjson(events) {
+  return events.map((event) => JSON.stringify(event)).join('\n') + '\n';
+}
+
+export async function mockScans(context, app) {
+  const scans = await interceptScans(context, app, '/api/scan', 'scans.json');
+  return {
+    requests: scans.requests,
+    unexpected: scans.unexpected,
+    assertFinished: scans.assertFinished,
+    async complete() {
+      const { route, fixture } = await scans.next((fixture) => ({ repository: fixture.repository }));
       const commit = '1111111111111111111111111111111111111111';
       const skills = fixture.skills.map((skill) => ({
         ...skill, warnings: [],
@@ -131,16 +166,22 @@ export async function mockScans(context, app) {
         { type: 'progress', message: `Resolving repository: ${fixture.repository}`, current: null, total: null },
         { type: 'complete', inventory },
       ];
-      await route.fulfill({
-        contentType: 'application/x-ndjson',
-        body: events.map((event) => JSON.stringify(event)).join('\n') + '\n',
-      });
+      await route.fulfill({ contentType: 'application/x-ndjson', body: ndjson(events) });
     },
-    assertFinished() {
-      expect(completed).toBe(fixtures.length);
-      expect(requests).toHaveLength(fixtures.length);
-      expect(pending).toHaveLength(0);
-      expect(unexpected).toEqual([]);
+  };
+}
+
+// Organization fixtures contain the complete event stream. Organization scans
+// never record recent repositories, so no history is written.
+export async function mockOrganizationScans(context, app) {
+  const scans = await interceptScans(context, app, '/api/scan-org', 'organization-scans.json');
+  return {
+    requests: scans.requests,
+    unexpected: scans.unexpected,
+    assertFinished: scans.assertFinished,
+    async complete() {
+      const { route, fixture } = await scans.next((fixture) => ({ organization: fixture.organization }));
+      await route.fulfill({ contentType: 'application/x-ndjson', body: ndjson(fixture.events) });
     },
   };
 }

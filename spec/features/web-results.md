@@ -50,6 +50,23 @@ inventory and show a clear-filters action. This state is distinct from a
 completed scan with no skills, an empty repository, and a failed scan.
 Reset filters and the view on each new scan.
 
+## Organization results
+
+For an [organization scan](organization-scan.md#inventory-and-aggregation), the
+summary shows the organization, the number of public repositories scanned,
+repositories with skills, and skipped forks. A **Repositories** section lists
+failed repositories first with their diagnostics, then repositories with skills,
+their skill counts, and shortened commit links with full-commit labels.
+Repositories without skills are collapsed into an expandable list that marks
+empty repositories. Any failed repository shows an incomplete-scan notice and an
+incomplete results status; its skills are missing rather than counted as zero.
+
+Skill cards, statistics, grouped and all-skills views, and filters behave as for
+a repository scan across all scanned repositories. Card paths include the
+repository, so searching for `owner/repository/` shows one repository's skills.
+An organization with no skills says no `SKILL.md` files were found; one with no
+repositories to scan, or none that could be scanned, says so instead.
+
 ## Accessibility and layout
 
 Use labeled controls, semantic headings, keyboard operation, visible focus, a
@@ -68,3 +85,5 @@ layouts support the same flow.
 - Filtering all cards away preserves the inventory and offers a clear-filters
   action; empty scans retain their summary statistics.
 - Desktop and narrow-screen layouts support the same keyboard-accessible flow.
+- Organization results list failures, repositories with skills, and
+  repositories without skills, and group matching skills across repositories.

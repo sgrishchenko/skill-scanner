@@ -11,6 +11,8 @@ The executable is named `skill-scanner`.
 ```text
 skill-scanner scan OWNER/REPO
 skill-scanner scan https://github.com/OWNER/REPO
+skill-scanner scan-org OWNER
+skill-scanner scan-org https://github.com/OWNER
 skill-scanner serve
 skill-scanner serve --port 8080
 skill-scanner recent
@@ -23,7 +25,9 @@ Run `scan` with one supported [repository input](repository-access.md#repository
 The application resolves the default branch to a commit and scans its contents,
 reusing a matching [cached analysis](analysis-cache.md) when available.
 Read the skill names and descriptions, then follow a GitHub link to inspect a
-source file. `serve` launches the [local web server](local-web-server.md).
+source file. `scan-org` scans every public non-fork repository of one
+organization or user; see [organization scan](organization-scan.md) and the
+[organization report](#organization-report). `serve` launches the [local web server](local-web-server.md).
 `recent` lists successful prior scans without GitHub access; `recent remove`
 forgets an entry. See [recent repositories](recent-repositories.md) for storage,
 ordering, and removal semantics. History access errors exit 1; successful list
@@ -84,12 +88,46 @@ For a completed scan with no results, print `Skills found: 0` and
 is no commit to scan. Failed or incomplete scans produce a diagnostic without
 a completed inventory.
 
+## Organization report
+
+`scan-org` prints progress for each listing page and repository to stderr, with
+that repository's steps indented below it. After the scan, stdout starts with
+the owner and repository counts, then any failed repositories with their
+diagnostics, then each repository with skills and its commit, followed by the
+usual statistics, similar groups, and full inventory across all repositories.
+Skill paths start with `owner/repository/`.
+
+```text
+Organization: example
+Repositories scanned: 5
+Repositories with skills: 2
+Repositories without skills: 2
+Failed repositories: 1
+Forks skipped: 2
+
+Incomplete: these repositories could not be scanned, so their skills are missing:
+  example/huge-monorepo: GitHub truncated this repository's file listing. ...
+
+Repositories with skills:
+  example/agent-tools: 2 skills at <commit-sha>
+  example/review-bot: 1 skill at <commit-sha>
+
+Skills found: 3
+...
+```
+
+An owner with no public repositories to scan prints `No public repositories to
+scan.` When any repository failed, the report is still printed, a stderr error
+states how many repositories could not be scanned, and the command exits 1.
+A scan stopped by credential, rate-limit, or connection failures prints only
+the diagnostic.
+
 ## Exit codes
 
 | Exit code | Meaning |
 | --- | --- |
 | `0` | Completed scan, including zero skills or metadata warnings; also help/version output and broken stdout pipes |
-| `1` | Scan or report could not be completed; also web server startup failures |
+| `1` | Scan or report could not be completed, including organization scans with any failed repository; also web server startup failures |
 | `2` | Invalid command usage or repository input |
 
 ## Acceptance checks
@@ -105,3 +143,5 @@ a completed inventory.
   escaped.
 - Zero results and empty repositories succeed; failed scans do not emit an
   inventory. Usage errors, help/version, and broken pipes follow the exit table.
+- Organization reports list failed repositories before the combined inventory
+  and exit 1 when any repository failed.

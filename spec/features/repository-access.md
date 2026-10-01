@@ -10,8 +10,11 @@ optionally ending in `/` or `.git`. Reject credentials, query strings,
 fragments, ports, local paths, and branch/file URLs. Branch, tag, and commit
 selection are deferred.
 
+[Organization scans](organization-scan.md#input-and-listing) instead accept one
+`OWNER` or `https://github.com/OWNER` and list that owner's public repositories.
+
 The [web form](web-scan.md) trims surrounding whitespace before applying the
-same repository validation. Invalid CLI input is a usage error; the
+same repository or owner validation. Invalid CLI input is a usage error; the
 [CLI report](cli-report.md#exit-codes) and
 [web scan API](web-scan-api.md#request-validation) define interface-specific
 error handling.
@@ -25,7 +28,8 @@ repository API limits. Reject private repositories even when the token can
 access them.
 
 Even with a cached analysis, every scan checks repository access and resolves
-the current default-branch commit online. Cache hits skip only tree/blob reads;
+the current default-branch commit online. Organization scans take repository
+details from the owner's public repository listing. Cache hits skip only tree/blob reads;
 failed validation cannot return stale results. See the
 [analysis cache](analysis-cache.md#freshness-and-reuse).
 
@@ -43,7 +47,9 @@ web server exposes no GitHub API base-URL override.
 - Honor integer `Retry-After` values up to five seconds. Longer or unsupported
   values fail with a retry-later diagnostic.
 - Fail immediately on HTTP 403 rate limits with guidance. Do not retry other
-  HTTP failures.
+  HTTP failures. Credential, rate-limit, retry-delay, and connection failures
+  stop an [organization scan](organization-scan.md#repository-scans); other
+  failures affect only the repository being scanned.
 - Read at most 32 MiB per API JSON response. An oversized or malformed API
   listing, HTTP failure, or failed blob download fails the entire scan.
   [Skill metadata](skill-metadata.md) defines the separate 1 MiB file limit.

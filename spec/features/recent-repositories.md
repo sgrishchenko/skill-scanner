@@ -8,6 +8,7 @@ successfully scanned public GitHub repositories.
 - Save a repository only after a complete successful scan, including cache
   hits, metadata warnings, zero skills, and empty repositories. A failed or
   partial scan neither creates an entry nor updates an existing entry.
+  [Organization scans](organization-scan.md) do not create or update entries.
 - Keep one entry per case-insensitive owner/repository. All supported input
   forms share that entry. A subsequent successful scan updates its spelling,
   completion time, and skill count. List newest first, with case-insensitive
