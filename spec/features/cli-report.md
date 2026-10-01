@@ -19,6 +19,9 @@ skill-scanner recent
 skill-scanner recent remove OWNER/REPO
 skill-scanner starred
 skill-scanner starred remove OWNER/REPO PATH
+skill-scanner codex
+skill-scanner codex install OWNER/REPO PATH
+skill-scanner codex remove NAME
 skill-scanner --help
 skill-scanner --version
 ```
@@ -36,6 +39,9 @@ ordering, and removal semantics. History access errors exit 1; successful list
 and removal operations exit 0, and invalid repository inputs exit 2.
 `starred` lists starred skills and `starred remove` unstars one, with the same
 exit codes; see [starred skills](starred-skills.md#cli).
+`codex` lists skills installed for Codex, `codex install` installs one from the
+default branch, and `codex remove` removes one; see
+[Codex skills](codex-skills.md#cli).
 Branch selection and CLI JSON export remain deferred.
 
 ## Output streams and progress
@@ -131,8 +137,8 @@ the diagnostic.
 | Exit code | Meaning |
 | --- | --- |
 | `0` | Completed scan, including zero skills or metadata warnings; also help/version output and broken stdout pipes |
-| `1` | Scan or report could not be completed, including organization scans with any failed repository; also web server startup failures |
-| `2` | Invalid command usage or repository input |
+| `1` | Scan or report could not be completed, including organization scans with any failed repository; also web server startup failures and failed Codex installations or removals |
+| `2` | Invalid command usage, repository input, skill path, or Codex folder name |
 
 ## Acceptance checks
 

@@ -12,6 +12,11 @@ let starred = new Map();
 let starredEnabled = true;
 let starredRequest = 0;
 const pendingStars = new Set();
+// Codex installations by the same key as stars.
+let codexSkills = new Map();
+let codexEnabled = true;
+let codexRequest = 0;
+const pendingCodex = new Set();
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -155,13 +160,13 @@ async function removeRecent(repository) {
   }
 }
 
-function starKey(repository, path) {
+function skillKey(repository, path) {
   return `${repository.toLowerCase()}\n${path}`;
 }
 
-// Stars address a repository-relative path at a scanned commit. Organization
-// results prefix each path with owner/repository, which names its repository.
-function starSource(skill) {
+// Stars and installations address a repository-relative path at a scanned
+// commit. Organization results prefix each path with owner/repository.
+function skillSource(skill) {
   let source = { repository: inventory.repository, path: skill.path, commit: inventory.commit };
   if (inventory.organization !== undefined) {
     const [owner, name, ...rest] = skill.path.split("/");
@@ -169,7 +174,7 @@ function starSource(skill) {
     const commit = inventory.repositories.find((summary) => summary.repository === repository)?.commit;
     source = { repository, path: rest.join("/"), commit };
   }
-  return { ...source, key: starKey(source.repository, source.path) };
+  return { ...source, key: skillKey(source.repository, source.path) };
 }
 
 function connectionMessage(error) {
@@ -212,7 +217,7 @@ async function refreshStarred() {
     const result = await response.json();
     if (request !== starredRequest) return;
     const previous = [...starred.keys()].sort().join("\0");
-    starred = new Map(result.skills.map((skill) => [starKey(skill.repository, skill.path), skill]));
+    starred = new Map(result.skills.map((skill) => [skillKey(skill.repository, skill.path), skill]));
     const list = document.createDocumentFragment();
     for (const [key, skill] of starred) {
       const row = node("li", "recent-row starred-row");
@@ -251,7 +256,7 @@ async function refreshStarred() {
 
 async function setStar(skill, source, adding) {
   const { repository, path, commit } = source;
-  const key = starKey(repository, path);
+  const key = skillKey(repository, path);
   if (pendingStars.has(key)) return;
   const fromList = $("starred-list").contains(document.activeElement);
   pendingStars.add(key);
@@ -283,6 +288,115 @@ async function setStar(skill, source, adding) {
   }
 }
 
+function showCodexError(message) {
+  $("codex-error").textContent = message;
+  $("codex-error").hidden = false;
+}
+
+function updateCodexButtons() {
+  document.querySelectorAll("[data-codex-key]").forEach((button) => {
+    const key = button.dataset.codexKey;
+    const installed = codexSkills.has(key);
+    const pending = pendingCodex.has(key);
+    button.dataset.installed = String(installed);
+    // Disabling the button would drop keyboard focus; setCodex ignores repeats.
+    button.setAttribute("aria-disabled", String(pending));
+    button.textContent = pending
+      ? installed ? "Removing…" : "Installing…"
+      : installed ? "Remove from Codex" : "Install for Codex";
+    button.setAttribute("aria-label", installed
+      ? `Remove ${button.dataset.codexPath} from Codex`
+      : `Install ${button.dataset.codexPath} for Codex`);
+  });
+  document.querySelectorAll("[data-codex-remove-key]").forEach((button) => {
+    button.disabled = pendingCodex.has(button.dataset.codexRemoveKey);
+  });
+}
+
+async function refreshCodex() {
+  const request = ++codexRequest;
+  try {
+    const response = await fetch("/api/codex", { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not load Codex skills. Refresh the page to try again.");
+    const result = await response.json();
+    if (request !== codexRequest) return;
+    codexSkills = new Map(result.skills.map((skill) => [skillKey(skill.repository, skill.path), skill]));
+    const list = document.createDocumentFragment();
+    for (const [key, skill] of codexSkills) {
+      const row = node("li", "recent-row starred-row");
+      const details = node("div", "recent-details");
+      details.append(node("p", "starred-name", skill.name), node("p", "recent-hint", `${skill.repository} · ${skill.path}`));
+      const actions = node("div", "starred-actions");
+      const link = externalLink("Source ↗", skill.link, "text-button");
+      link.setAttribute("aria-label", `View the installed ${skill.path} from ${skill.repository} on GitHub (opens in a new tab)`);
+      const remove = node("button", "text-button", "Remove");
+      remove.type = "button";
+      remove.dataset.codexRemoveKey = key;
+      remove.setAttribute("aria-label", `Remove ${skill.name} from Codex`);
+      remove.addEventListener("click", () => setCodex(skill, { ...skill, key }, false));
+      actions.append(link, remove);
+      row.append(details, actions);
+      list.append(row);
+    }
+    $("codex-list").replaceChildren(list);
+    if (result.enabled) {
+      const directory = node("code", "", result.directory);
+      $("codex-hint").replaceChildren("Installed in ", directory, ", where Codex finds personal skills. Restart Codex if a new skill doesn’t appear.");
+    } else {
+      $("codex-hint").textContent = "Install skills from the results to use them in Codex.";
+    }
+    $("codex-status").textContent = !result.enabled
+      ? "Codex skill installation is disabled on this server."
+      : result.skills.length ? "Installed by Skill Scanner, sorted by folder name." : "No skills installed for Codex yet.";
+    const changed = codexEnabled !== result.enabled;
+    codexEnabled = result.enabled;
+    if (changed) rerenderSkills($("codex-title"));
+    else if (inventory) updateCodexButtons();
+    return true;
+  } catch (error) {
+    if (request !== codexRequest) return;
+    $("codex-status").textContent = "Codex skills are unavailable.";
+    showCodexError(connectionMessage(error));
+  }
+}
+
+// Install the scanned commit so Codex gets the files shown in the results.
+async function setCodex(skill, source, installing) {
+  const { repository, path, commit, key } = source;
+  if (pendingCodex.has(key)) return;
+  const name = installing ? skill.name : codexSkills.get(key)?.name;
+  if (!installing && !name) return;
+  const fromList = $("codex-list").contains(document.activeElement);
+  pendingCodex.add(key);
+  updateCodexButtons();
+  $("codex-error").hidden = true;
+  $("codex-status").textContent = installing ? `Installing ${skill.name} for Codex…` : `Removing ${name} from Codex…`;
+  try {
+    const response = await fetch(installing ? "/api/codex/install" : "/api/codex/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Skill-Scanner": "1" },
+      body: JSON.stringify(installing ? { repository, path, commit } : { name }),
+      cache: "no-store",
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || `Could not ${installing ? "install" : "remove"} the skill. Try again.`);
+    }
+    if (await refreshCodex()) {
+      $("codex-status").textContent = installing
+        ? `Installed ${body.skill.name} for Codex.`
+        : `Removed ${name} from Codex.`;
+    }
+  } catch (error) {
+    await refreshCodex();
+    showCodexError(connectionMessage(error));
+  } finally {
+    pendingCodex.delete(key);
+    updateCodexButtons();
+    if (fromList && !$("codex-list").contains(document.activeElement)) $("codex-title").focus();
+  }
+}
+
 function showError(message) {
   inventory = null;
   $("scan-results").hidden = true;
@@ -300,7 +414,7 @@ function skillCard(skill, heading = "h3") {
   if (starredEnabled) {
     const star = node("button", "star-button");
     star.type = "button";
-    const source = starSource(skill);
+    const source = skillSource(skill);
     star.dataset.starKey = source.key;
     star.setAttribute("aria-label", `Star ${skill.path}`);
     star.addEventListener("click", () => {
@@ -311,9 +425,22 @@ function skillCard(skill, heading = "h3") {
   card.append(title);
   card.append(node("p", "skill-description", skill.description || "No description available."));
   card.append(node("code", "skill-path", skill.path));
+  const actions = node("div", "skill-actions");
   const link = externalLink("View on GitHub ↗", skill.link, "skill-link");
   link.setAttribute("aria-label", `View ${skill.path} on GitHub (opens in a new tab)`);
-  card.append(link);
+  actions.append(link);
+  if (codexEnabled) {
+    const install = node("button", "codex-button");
+    install.type = "button";
+    const source = skillSource(skill);
+    install.dataset.codexKey = source.key;
+    install.dataset.codexPath = skill.path;
+    install.addEventListener("click", () => {
+      setCodex(skill, source, !codexSkills.has(install.dataset.codexKey));
+    });
+    actions.append(install);
+  }
+  card.append(actions);
   if (skill.warnings.length) {
     const details = node("details", "skill-warning");
     const count = skill.warnings.length;
@@ -409,7 +536,7 @@ function renderSkills() {
     const indices = group.skill_indices.filter((index) => {
       const skill = inventory.skills[index];
       return (!warningsOnly || skill.warnings.length > 0) &&
-        (!starredOnly || starred.has(starSource(skill).key)) &&
+        (!starredOnly || starred.has(skillSource(skill).key)) &&
         [skill.name, skill.description, skill.path].some((text) => text.toLocaleLowerCase().includes(query));
     });
     if (indices.length) {
@@ -426,6 +553,7 @@ function renderSkills() {
   $("skill-list").classList.toggle("grouped", groupedView);
   $("skill-list").replaceChildren(cards);
   updateStarButtons();
+  updateCodexButtons();
   $("result-count").textContent = `Showing ${visible.size} of ${inventory.skills.length} skills` + (groupedView
     ? ` in ${matchingGroups.length} of ${groups.length} groups (including standalone skills) · largest first`
     : " · sorted by path");
@@ -613,6 +741,8 @@ $("refresh-recent").addEventListener("click", () => {
 window.addEventListener("focus", () => {
   if (!busy) refreshRecent();
   refreshStarred();
+  refreshCodex();
 });
 refreshRecent();
 refreshStarred();
+refreshCodex();

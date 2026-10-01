@@ -41,9 +41,17 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<StarredAction>,
     },
+    /// List, install, or remove skills in Codex's personal skills directory
+    #[command(
+        after_help = "Skills are installed in ~/.agents/skills/NAME (%USERPROFILE%\\.agents\\skills on Windows), where Codex discovers personal skills.\nNAME is the skill's directory name, or the repository name for a root-level SKILL.md.\nInstalling copies the skill's directory, without nested skills, symlinks, or submodules, and never runs it.\nOnly folders installed by Skill Scanner are listed, replaced, or removed.\nSKILL_SCANNER_CODEX_SKILLS_DIR overrides the directory; an empty value disables installation.\nAn optional GITHUB_TOKEN raises GitHub's public API limits."
+    )]
+    Codex {
+        #[command(subcommand)]
+        action: Option<CodexAction>,
+    },
     /// Serve a local web interface at http://127.0.0.1:3000
     #[command(
-        after_help = "Open the printed URL in your browser. Press Ctrl+C to stop.\nAnalyses share the CLI cache and are revalidated by commit on every scan.\nSKILL_SCANNER_CACHE_DIR overrides the cache directory; an empty value disables it.\nSuccessful scans are saved in recent repositories; see skill-scanner recent --help.\nStarred skills are saved on this machine; see skill-scanner starred --help.\nAn optional GITHUB_TOKEN raises GitHub's public API limits."
+        after_help = "Open the printed URL in your browser. Press Ctrl+C to stop.\nAnalyses share the CLI cache and are revalidated by commit on every scan.\nSKILL_SCANNER_CACHE_DIR overrides the cache directory; an empty value disables it.\nSuccessful scans are saved in recent repositories; see skill-scanner recent --help.\nStarred skills are saved on this machine; see skill-scanner starred --help.\nSkills can be installed for Codex from the results; see skill-scanner codex --help.\nAn optional GITHUB_TOKEN raises GitHub's public API limits."
     )]
     Serve {
         /// Local port to listen on (use 0 to choose an available port)
@@ -69,5 +77,21 @@ pub enum StarredAction {
         repository: String,
         /// Repository-relative path of the skill's SKILL.md file
         path: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CodexAction {
+    /// Install a skill from the repository's default branch for Codex
+    Install {
+        /// OWNER/REPO or https://github.com/OWNER/REPO
+        repository: String,
+        /// Repository-relative path of the skill's SKILL.md file
+        path: String,
+    },
+    /// Remove a skill that Skill Scanner installed for Codex
+    Remove {
+        /// The skill's folder name, as listed by skill-scanner codex
+        name: String,
     },
 }

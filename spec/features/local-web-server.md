@@ -50,7 +50,8 @@ fetches are same-origin only, and framing is disabled. Add `nosniff`,
 Render repository text with DOM text nodes, without HTML or Markdown evaluation.
 Source links must use the HTTPS GitHub origin and open in a new tab with
 `noopener noreferrer`. The interface explains that discovery does not certify
-safety or compatibility and that it never installs or runs skills.
+safety or compatibility, that it never runs skills, and that skills are
+installed only on request, as described in [Codex skills](codex-skills.md).
 
 See [web scan](web-scan.md) for concurrency and lifecycle, and
 [web results](web-results.md#accessibility-and-layout) for accessibility.

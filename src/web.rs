@@ -16,6 +16,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::{
     aggregation::{self, Aggregation},
     cache::ScanCache,
+    codex::{CodexError, CodexSkills},
     github::GitHubClient,
     organization::{self, OrganizationInventory, OrganizationProgress, RepositorySummary},
     recent::RecentRepositories,
@@ -33,7 +34,10 @@ struct WebState {
     cache: ScanCache,
     recent: RecentRepositories,
     starred: StarredSkills,
+    codex: CodexSkills,
     available: Arc<Semaphore>,
+    /// One Codex installation or removal at a time, independent of scans.
+    installing: Arc<Semaphore>,
 }
 
 #[derive(Deserialize)]
@@ -62,6 +66,20 @@ struct StarRequest {
 struct UnstarRequest {
     repository: String,
     path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InstallRequest {
+    repository: String,
+    path: String,
+    commit: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemoveCodexRequest {
+    name: String,
 }
 
 #[derive(Serialize)]
@@ -157,6 +175,7 @@ pub fn serve(port: u16, client: GitHubClient) -> io::Result<()> {
                 ScanCache::from_environment(),
                 RecentRepositories::from_environment(),
                 StarredSkills::from_environment(),
+                CodexSkills::from_environment(),
             ),
         )
         .await
@@ -169,6 +188,7 @@ pub(crate) fn router(
     cache: ScanCache,
     recent: RecentRepositories,
     starred: StarredSkills,
+    codex: CodexSkills,
 ) -> Router {
     Router::new()
         .route(
@@ -204,13 +224,18 @@ pub(crate) fn router(
         .route("/api/starred", get(list_starred))
         .route("/api/starred/add", post(star))
         .route("/api/starred/remove", post(unstar))
+        .route("/api/codex", get(list_codex))
+        .route("/api/codex/install", post(install_codex))
+        .route("/api/codex/remove", post(remove_codex))
         .fallback(|| async { error(StatusCode::NOT_FOUND, "Page not found.") })
         .with_state(WebState {
             client,
             cache,
             recent,
             starred,
+            codex,
             available: Arc::new(Semaphore::new(1)),
+            installing: Arc::new(Semaphore::new(1)),
         })
         .layer(DefaultBodyLimit::max(4096))
         .layer(middleware::from_fn(move |request, next| {
@@ -386,6 +411,113 @@ fn starred_result(result: Result<io::Result<()>, tokio::task::JoinError>) -> Res
 
 fn starred_error() -> Response {
     error(StatusCode::INTERNAL_SERVER_ERROR, "Could not access starred skills. Check SKILL_SCANNER_STARRED_DIR and directory permissions.")
+}
+
+async fn list_codex(State(state): State<WebState>) -> Response {
+    let directory = state
+        .codex
+        .directory()
+        .map(|directory| directory.to_string_lossy().into_owned());
+    match tokio::task::spawn_blocking(move || state.codex.list()).await {
+        Ok(Ok(skills)) => Json(serde_json::json!({
+            "enabled": directory.is_some(),
+            "directory": directory,
+            "skills": skills,
+        }))
+        .into_response(),
+        _ => codex_error(&CodexError::Storage(io::ErrorKind::Other.into())),
+    }
+}
+
+/// Install the scanned commit, so the files match the displayed results.
+async fn install_codex(
+    State(state): State<WebState>,
+    body: Result<Json<InstallRequest>, JsonRejection>,
+) -> Response {
+    let input = match body {
+        Ok(Json(input)) => input,
+        Err(rejection) => {
+            return error(
+                rejection.status(),
+                "Send a JSON object with repository, path, and commit fields (maximum 4 KiB).",
+            )
+        }
+    };
+    let repository = match input.repository.trim().parse::<Repository>() {
+        Ok(repository) => repository,
+        Err(message) => return error(StatusCode::BAD_REQUEST, &message),
+    };
+    if !state.codex.is_enabled() {
+        return codex_error(&CodexError::Disabled);
+    }
+    let Ok(permit) = state.installing.clone().try_acquire_owned() else {
+        return codex_busy();
+    };
+    let result = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        state.codex.install(
+            &state.client,
+            &repository,
+            &input.path,
+            Some(&input.commit),
+            |_| {},
+        )
+    })
+    .await;
+    match result {
+        Ok(Ok(installation)) => Json(serde_json::json!({
+            "skill": installation.skill,
+            "files": installation.files,
+        }))
+        .into_response(),
+        Ok(Err(failure)) => codex_error(&failure),
+        Err(_) => codex_error(&CodexError::Storage(io::ErrorKind::Other.into())),
+    }
+}
+
+async fn remove_codex(
+    State(state): State<WebState>,
+    body: Result<Json<RemoveCodexRequest>, JsonRejection>,
+) -> Response {
+    let input = match body {
+        Ok(Json(input)) => input,
+        Err(rejection) => {
+            return error(
+                rejection.status(),
+                "Send a JSON object with one name field (maximum 4 KiB).",
+            )
+        }
+    };
+    let Ok(permit) = state.installing.clone().try_acquire_owned() else {
+        return codex_busy();
+    };
+    let result = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        state.codex.remove(&input.name)
+    })
+    .await;
+    match result {
+        Ok(Ok(_)) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Err(failure)) => codex_error(&failure),
+        Err(_) => codex_error(&CodexError::Storage(io::ErrorKind::Other.into())),
+    }
+}
+
+fn codex_error(failure: &CodexError) -> Response {
+    let status = match failure {
+        CodexError::Invalid(_) => StatusCode::BAD_REQUEST,
+        CodexError::Disabled | CodexError::Conflict(_) => StatusCode::CONFLICT,
+        CodexError::Source(_) => StatusCode::BAD_GATEWAY,
+        CodexError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    error(status, &failure.to_string())
+}
+
+fn codex_busy() -> Response {
+    error(
+        StatusCode::CONFLICT,
+        "Another Codex skill change is running. Wait for it to finish, then try again.",
+    )
 }
 
 async fn scan(

@@ -48,6 +48,24 @@ fn with_web_stores(
     starred: crate::starred::StarredSkills,
     test: impl FnOnce(Router, &tokio::runtime::Runtime),
 ) {
+    with_web_codex(
+        replies,
+        cache,
+        recent,
+        starred,
+        crate::codex::CodexSkills::disabled(),
+        test,
+    );
+}
+
+fn with_web_codex(
+    replies: Vec<Reply>,
+    cache: crate::cache::ScanCache,
+    recent: crate::recent::RecentRepositories,
+    starred: crate::starred::StarredSkills,
+    codex: crate::codex::CodexSkills,
+    test: impl FnOnce(Router, &tokio::runtime::Runtime),
+) {
     let server = Server::start(replies);
     // The blocking reqwest client must be created and dropped outside Tokio.
     let client = Arc::new(server.client());
@@ -56,7 +74,7 @@ fn with_web_stores(
         .build()
         .unwrap();
     test(
-        crate::web::router(client.clone(), 3000, cache, recent, starred),
+        crate::web::router(client.clone(), 3000, cache, recent, starred, codex),
         &runtime,
     );
     drop(runtime);
@@ -183,6 +201,7 @@ fn default_http_port_accepts_the_hosts_and_origins_browsers_send() {
             crate::cache::ScanCache::disabled(),
             crate::recent::RecentRepositories::disabled(),
             crate::starred::StarredSkills::disabled(),
+            crate::codex::CodexSkills::disabled(),
         );
         for host in ["127.0.0.1", "localhost"] {
             let mut request = request("GET", "/", "");
@@ -518,6 +537,7 @@ fn cli_and_web_share_commit_validated_analysis_across_cache_instances() {
             ScanCache::new(directory.0.clone()),
             crate::recent::RecentRepositories::disabled(),
             crate::starred::StarredSkills::disabled(),
+            crate::codex::CodexSkills::disabled(),
         );
         let cached = events(app.clone().oneshot(scan_request()).await.unwrap()).await;
         assert_eq!(cached.len(), 4);
@@ -1179,6 +1199,321 @@ fn disabled_and_unavailable_starred_skills_are_reported_without_affecting_scans(
                     ("GET", "/api/starred", ""),
                     ("POST", "/api/starred/add", star.as_str()),
                     ("POST", "/api/starred/remove", unstar),
+                ] {
+                    assert_eq!(
+                        status(&app, method, route, body).await,
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    );
+                }
+                let events = events(app.oneshot(scan_request()).await.unwrap()).await;
+                assert_eq!(events.last().unwrap()["type"], "complete");
+            });
+        },
+    );
+    assert_eq!(std::fs::read_to_string(path).unwrap(), "not a directory");
+}
+
+fn with_codex(
+    replies: Vec<Reply>,
+    codex: crate::codex::CodexSkills,
+    test: impl FnOnce(Router, &tokio::runtime::Runtime),
+) {
+    with_web_codex(
+        replies,
+        crate::cache::ScanCache::disabled(),
+        crate::recent::RecentRepositories::disabled(),
+        crate::starred::StarredSkills::disabled(),
+        codex,
+        test,
+    );
+}
+
+async fn codex_response(app: &Router, method: &str, path: &str, body: &str) -> (StatusCode, Value) {
+    let response = app
+        .clone()
+        .oneshot(request(method, path, body))
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), 65536).await.unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+fn install_body(repository: &str, path: &str) -> String {
+    json!({ "repository": repository, "path": path, "commit": COMMIT }).to_string()
+}
+
+/// GitHub responses for installing skills/code-review at the pinned commit.
+fn code_review_install() -> Vec<Reply> {
+    vec![
+        repository(),
+        Reply::json(
+            format!("/repos/example/skills/commits/{COMMIT}"),
+            200,
+            json!({ "sha": COMMIT, "commit": { "tree": { "sha": ROOT } } }),
+        ),
+        tree(
+            ROOT,
+            false,
+            false,
+            vec![entry("skills", A, "040000", "tree", None)],
+        ),
+        tree(
+            A,
+            false,
+            false,
+            vec![entry("code-review", B, "040000", "tree", None)],
+        ),
+        tree(B, true, false, vec![skill("SKILL.md", C)]),
+        blob(C, VALID),
+    ]
+}
+
+#[test]
+fn codex_api_installs_the_scanned_commit_and_shares_installations_with_the_library() {
+    use crate::codex::CodexSkills;
+    let directory = TestDirectory::new();
+    with_codex(
+        code_review_install(),
+        CodexSkills::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                assert_eq!(
+                    codex_response(&app, "GET", "/api/codex", "").await,
+                    (
+                        StatusCode::OK,
+                        json!({
+                            "enabled": true,
+                            "directory": directory.0.to_string_lossy(),
+                            "skills": [],
+                        })
+                    )
+                );
+                let (status, installed) = codex_response(
+                    &app,
+                    "POST",
+                    "/api/codex/install",
+                    &install_body("https://github.com/example/skills", "skills/code-review/SKILL.md"),
+                )
+                .await;
+                assert_eq!(status, StatusCode::OK);
+                assert_eq!(installed["files"], 1);
+                let skill = &installed["skill"];
+                assert_eq!(skill["name"], "code-review");
+                assert_eq!(skill["repository"], "example/skills");
+                assert_eq!(skill["path"], "skills/code-review/SKILL.md");
+                assert_eq!(skill["commit"], COMMIT);
+                assert_eq!(
+                    skill["link"],
+                    format!("https://github.com/example/skills/blob/{COMMIT}/skills/code-review/SKILL.md")
+                );
+                assert!(skill["installed_at"].as_u64().unwrap() > 0);
+                let (_, list) = codex_response(&app, "GET", "/api/codex", "").await;
+                assert_eq!(list["skills"], json!([skill]));
+                // Another repository's skill with the same folder name conflicts
+                // without contacting GitHub.
+                let (status, conflict) = codex_response(
+                    &app,
+                    "POST",
+                    "/api/codex/install",
+                    &install_body("other/tools", "code-review/SKILL.md"),
+                )
+                .await;
+                assert_eq!(status, StatusCode::CONFLICT);
+                assert!(conflict["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("already holds skills/code-review/SKILL.md from example/skills"));
+            });
+        },
+    );
+    assert_eq!(
+        std::fs::read(directory.0.join("code-review/SKILL.md")).unwrap(),
+        VALID
+    );
+    // A new server and the CLI's library instance see the same installation.
+    assert_eq!(
+        CodexSkills::new(directory.0.clone()).list().unwrap()[0].name,
+        "code-review"
+    );
+    with_codex(
+        vec![],
+        CodexSkills::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                for _ in 0..2 {
+                    assert_eq!(
+                        status(
+                            &app,
+                            "POST",
+                            "/api/codex/remove",
+                            r#"{"name":"code-review"}"#
+                        )
+                        .await,
+                        StatusCode::NO_CONTENT
+                    );
+                }
+                let (_, list) = codex_response(&app, "GET", "/api/codex", "").await;
+                assert_eq!(list["skills"], json!([]));
+            });
+        },
+    );
+    assert_eq!(std::fs::read_dir(&directory.0).unwrap().count(), 0);
+}
+
+#[test]
+fn codex_routes_validate_input_and_have_the_same_browser_protections_as_scan() {
+    let directory = TestDirectory::new();
+    std::fs::create_dir(directory.0.join("mine")).unwrap();
+    with_codex(
+        vec![Reply::json(
+            "/repos/example/skills",
+            404,
+            json!({ "message": "secret-detail" }),
+        )],
+        crate::codex::CodexSkills::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                let valid = install_body("example/skills", "skills/code-review/SKILL.md");
+                let mut missing_header = request("POST", "/api/codex/install", &valid);
+                missing_header.headers_mut().remove("x-skill-scanner");
+                let mut foreign = request("POST", "/api/codex/remove", r#"{"name":"mine"}"#);
+                foreign
+                    .headers_mut()
+                    .insert("origin", "https://foreign.example".parse().unwrap());
+                let mut foreign_host = request("GET", "/api/codex", "");
+                foreign_host
+                    .headers_mut()
+                    .insert("host", "foreign.example:3000".parse().unwrap());
+                for request in [missing_header, foreign, foreign_host] {
+                    assert_eq!(
+                        app.clone().oneshot(request).await.unwrap().status(),
+                        StatusCode::FORBIDDEN
+                    );
+                }
+                let oversized = install_body("example/skills", &format!("{}/SKILL.md", "a".repeat(5000)));
+                for (route, body, expected) in [
+                    ("/api/codex/install", "{", StatusCode::BAD_REQUEST),
+                    ("/api/codex/install", r#"{"repository":"example/skills"}"#, StatusCode::UNPROCESSABLE_ENTITY),
+                    ("/api/codex/install", &oversized, StatusCode::PAYLOAD_TOO_LARGE),
+                    ("/api/codex/install", &install_body("https://user:secret@github.com/a/b", "SKILL.md"), StatusCode::BAD_REQUEST),
+                    ("/api/codex/install", &install_body("example/skills", "README.md"), StatusCode::BAD_REQUEST),
+                    ("/api/codex/install", &install_body("example/skills", ".hidden/SKILL.md"), StatusCode::BAD_REQUEST),
+                    ("/api/codex/install", &json!({"repository": "example/skills", "path": "SKILL.md", "commit": "main"}).to_string(), StatusCode::BAD_REQUEST),
+                    ("/api/codex/install", &install_body("example/tools", "mine/SKILL.md"), StatusCode::CONFLICT),
+                    ("/api/codex/remove", r#"{"name":"../escape"}"#, StatusCode::BAD_REQUEST),
+                    ("/api/codex/remove", r#"{"name":"mine","extra":1}"#, StatusCode::UNPROCESSABLE_ENTITY),
+                    ("/api/codex/remove", r#"{"name":"mine"}"#, StatusCode::CONFLICT),
+                ] {
+                    let (status, body) = codex_response(&app, "POST", route, body).await;
+                    assert_eq!(status, expected, "{route} {body}");
+                    assert!(!body.to_string().contains("secret"));
+                }
+                // GitHub failures are reported without server error text.
+                let (status, body) = codex_response(&app, "POST", "/api/codex/install", &valid).await;
+                assert_eq!(status, StatusCode::BAD_GATEWAY);
+                let message = body["message"].as_str().unwrap();
+                assert!(message.contains("HTTP 404"));
+                assert!(!message.contains("secret-detail"));
+            });
+        },
+    );
+    assert!(directory.0.join("mine").exists());
+    assert_eq!(std::fs::read_dir(&directory.0).unwrap().count(), 1);
+}
+
+#[test]
+fn one_codex_change_runs_at_a_time_independently_of_scans() {
+    let directory = TestDirectory::new();
+    let mut slow = Reply::json("/repos/example/skills", 404, json!({}));
+    slow.delay = Duration::from_millis(1500);
+    let mut replies = vec![slow];
+    replies.extend(snapshot());
+    replies.push(tree(ROOT, true, false, vec![]));
+    with_codex(
+        replies,
+        crate::codex::CodexSkills::new(directory.0.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                let body = install_body("example/skills", "skills/code-review/SKILL.md");
+                let first = tokio::spawn(app.clone().oneshot(request(
+                    "POST",
+                    "/api/codex/install",
+                    &body,
+                )));
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                for (route, body) in [
+                    ("/api/codex/install", body.as_str()),
+                    ("/api/codex/remove", r#"{"name":"code-review"}"#),
+                ] {
+                    let (status, response) = codex_response(&app, "POST", route, body).await;
+                    assert_eq!(status, StatusCode::CONFLICT);
+                    assert!(response["message"]
+                        .as_str()
+                        .unwrap()
+                        .contains("Another Codex skill change"));
+                }
+                // Scans keep their own limit while an installation runs.
+                let events = events(app.clone().oneshot(scan_request()).await.unwrap()).await;
+                assert_eq!(events.last().unwrap()["type"], "complete");
+                assert_eq!(
+                    first.await.unwrap().unwrap().status(),
+                    StatusCode::BAD_GATEWAY
+                );
+                assert_eq!(
+                    status(
+                        &app,
+                        "POST",
+                        "/api/codex/remove",
+                        r#"{"name":"code-review"}"#
+                    )
+                    .await,
+                    StatusCode::NO_CONTENT
+                );
+            });
+        },
+    );
+}
+
+#[test]
+fn disabled_and_unavailable_codex_skills_are_reported_without_affecting_scans() {
+    let install = install_body("example/skills", "skills/code-review/SKILL.md");
+    with_web(vec![], |app, runtime| {
+        runtime.block_on(async {
+            assert_eq!(
+                codex_response(&app, "GET", "/api/codex", "").await,
+                (
+                    StatusCode::OK,
+                    json!({"enabled": false, "directory": null, "skills": []})
+                )
+            );
+            for (route, body) in [
+                ("/api/codex/install", install.as_str()),
+                ("/api/codex/remove", r#"{"name":"code-review"}"#),
+            ] {
+                let (status, response) = codex_response(&app, "POST", route, body).await;
+                assert_eq!(status, StatusCode::CONFLICT);
+                assert!(response["message"].as_str().unwrap().contains("disabled"));
+            }
+        });
+    });
+    let directory = TestDirectory::new();
+    let path = directory.0.join("file");
+    std::fs::write(&path, "not a directory").unwrap();
+    let mut replies = snapshot();
+    replies.push(tree(ROOT, true, false, vec![]));
+    with_codex(
+        replies,
+        crate::codex::CodexSkills::new(path.clone()),
+        |app, runtime| {
+            runtime.block_on(async {
+                for (method, route, body) in [
+                    ("GET", "/api/codex", ""),
+                    ("POST", "/api/codex/install", install.as_str()),
+                    ("POST", "/api/codex/remove", r#"{"name":"code-review"}"#),
                 ] {
                     assert_eq!(
                         status(&app, method, route, body).await,

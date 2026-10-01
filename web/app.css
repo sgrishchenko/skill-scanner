@@ -1074,6 +1074,40 @@ progress::-moz-progress-bar {
   font-weight: 600;
 }
 
+.skill-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.skill-actions .skill-link {
+  margin-top: 0;
+}
+
+.codex-button {
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--green);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.codex-button[data-installed=true] {
+  background: var(--lime);
+  border-color: #c4d59c;
+  font-weight: 600;
+}
+
+.codex-button[aria-disabled=true] {
+  cursor: wait;
+  opacity: .65;
+}
+
 .star-icon {
   font-size: 13px;
   line-height: 1;
@@ -1270,7 +1304,7 @@ footer {
   overflow-wrap: anywhere;
   unicode-bidi: plaintext;
 }
-.starred-row .recent-hint {
+.starred-row .recent-hint,.codex-hint {
   overflow-wrap: anywhere;
 }
 .starred-actions {

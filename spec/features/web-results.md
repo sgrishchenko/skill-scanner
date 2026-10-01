@@ -15,7 +15,8 @@ the entire scan and remain visible for successful empty scans with zero values.
 
 Each card shows the skill's name, description, repository-relative path, and
 commit-pinned GitHub source link, plus a **Star** toggle defined by
-[starred skills](starred-skills.md#web-interface). Use the scanner's directory/repository name
+[starred skills](starred-skills.md#web-interface) and an **Install for Codex**
+button defined by [Codex skills](codex-skills.md#web-interface). Use the scanner's directory/repository name
 fallback. Missing descriptions say “No description available.” Let users expand
 metadata warnings to read field-specific messages. Every source file remains
 individually accessible.
@@ -67,8 +68,9 @@ incomplete results status; its skills are missing rather than counted as zero.
 Skill cards, statistics, grouped and all-skills views, and filters behave as for
 a repository scan across all scanned repositories. Card paths include the
 repository, so searching for `owner/repository/` shows one repository's skills.
-Stars use each skill's repository, repository-relative path, and repository
-commit, as in [starred skills](starred-skills.md).
+Stars and Codex installations use each skill's repository,
+repository-relative path, and repository commit, as in
+[starred skills](starred-skills.md) and [Codex skills](codex-skills.md).
 An organization with no skills says no `SKILL.md` files were found; one with no
 repositories to scan, or none that could be scanned, says so instead.
 

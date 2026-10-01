@@ -8,6 +8,7 @@ behavior and compares named screenshots against reviewed baselines:
 | [Recent repositories](recent-repositories.spec.mjs) | [Nine screenshots](snapshots/recent-repositories.spec.mjs) | [Recording](../../docs/demos/recent-repositories.md) |
 | [Starred skills](starred-skills.spec.mjs) | [Nine screenshots](snapshots/starred-skills.spec.mjs) | [Recording](../../docs/demos/starred-skills.md) |
 | [Organization scan](organization-scan.spec.mjs) | [Five screenshots](snapshots/organization-scan.spec.mjs) | [Recording](../../docs/demos/organization-scan.md) |
+| [Codex skills](codex-skills.spec.mjs) | [Eight screenshots](snapshots/codex-skills.spec.mjs) | [Recording](../../docs/demos/codex-skills.md) |
 
 The demos follow the
 [PR demonstration requirements](../../CONTRIBUTING.md#visual-feature-demonstrations).
@@ -33,8 +34,8 @@ docker run --rm --init --ipc=host --platform linux/amd64 \
 Always rebuild first, including after browser asset changes. Each test starts
 `target/debug/skill-scanner` on an available loopback port; the recent
 repositories and starred skills tests restart it on newly allocated ports. Each
-test gets history, starred, and cache directories under its own Playwright
-output directory. Tokens are removed from child process
+test gets history, starred, Codex skills, and cache directories under its own
+Playwright output directory. Tokens are removed from child process
 environments. External browser requests are blocked and fail the test; a dead
 proxy also prevents accidental server-side GitHub access.
 
@@ -42,12 +43,19 @@ Only `/api/scan` responses and their successful-scan history writes are mocked
 using [fixed fixtures](fixtures/scans.json), and `/api/scan-org` responses use
 complete [organization event streams](fixtures/organization-scans.json) without
 history writes. Each test treats the other scan route as an unexpected request.
+The Codex test uses [its own scan fixtures](fixtures/codex-scans.json) and holds
+the two successful `/api/codex/install` responses, writing each installed folder
+and its record as the server would, because installing downloads from GitHub.
+Other install requests, such as the folder-name conflict, reach the server.
 The embedded browser assets, `/api/recent`, `/api/recent/remove`, `/api/starred`
-and its add/remove routes, disk persistence, `skill-scanner recent`, and
-`skill-scanner starred` run unchanged. This tests the browser workflow and
+and its add/remove routes, `/api/codex` and `/api/codex/remove`, disk
+persistence, `skill-scanner recent`, `skill-scanner starred`, and
+`skill-scanner codex` run unchanged. This tests the browser workflow and
 shared history, while
 [Rust scan tests](../../src/recent_scan_tests.rs) independently verify actual
-scanner recording behavior with mocked GitHub responses.
+scanner recording behavior with mocked GitHub responses, and
+[Codex install tests](../../src/codex_install_tests.rs) verify downloading and
+publishing.
 
 Viewport, device scale, browser version, locale, UTC timezone, motion preference,
 and fixture timestamps are fixed. Chromium uses software rendering, full tile
@@ -120,6 +128,24 @@ It also checks the exact scan request sequence, absence of external requests,
 and absence of JavaScript errors. Error/recovery and mobile scenarios remain
 acceptance requirements in the [feature spec](../../spec/features/starred-skills.md).
 
+The Codex skills checkpoints are:
+
+| Screenshot | Behavior asserted before comparison |
+| --- | --- |
+| `01-ready-to-install` | Empty Codex list showing the isolated directory; every card offers **Install for Codex**; the CLI lists nothing |
+| `02-installing` | The pending install keeps focus, reads **Installing…**, is announced, and ignores a repeated press |
+| `03-installed` | The card switches to **Remove from Codex** with focus kept; the list shows the source and pinned link; the CLI lists the skill |
+| `04-name-conflict` | Another repository's skill with the same folder name is refused by the server with a message; the installed folder is unchanged |
+| `05-second-install` | Keyboard installation of another skill clears the error and sorts the list by folder name |
+| `06-restart-persistence` | Restart preserves the list and CLI order; results reset |
+| `07-remove-from-list` | Removing from the list deletes the folder and focuses the list heading |
+| `08-remove-from-card` | Removing from a card after a new scan deletes the folder; the CLI lists nothing |
+
+It also checks the install request bodies, the exact scan request sequence,
+absence of external requests, and absence of JavaScript errors. Error/recovery
+paths beyond the conflict and mobile scenarios remain acceptance requirements
+in the [feature spec](../../spec/features/codex-skills.md).
+
 ## Export the passing recording
 
 After committing the tests, fixtures, and reviewed baselines, run the normal
@@ -130,11 +156,13 @@ export each demo from that run:
 npm run demo --prefix tests/e2e -- recent-repositories
 npm run demo --prefix tests/e2e -- starred-skills
 npm run demo --prefix tests/e2e -- organization-scan
+npm run demo --prefix tests/e2e -- codex-skills
 ```
 
 The exporter requires a clean tested commit, every test passing with no
 retries/skips, exactly one test in the named spec with all of its screenshot
-checkpoints (five for the organization scan, nine for the others), and baseline
+checkpoints (five for the organization scan, eight for Codex skills, nine for
+the others), and baseline
 updates disabled. It converts that test's video attachment into the checked-in
 MP4 and animated GIF, without changing the sequence, and writes a manifest with
 the tested revision, environment, checkpoint names, and media hashes. It

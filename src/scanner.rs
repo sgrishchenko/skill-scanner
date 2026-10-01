@@ -233,12 +233,15 @@ fn discover(
 }
 
 fn is_skill(entry: &TreeEntry) -> bool {
-    entry.kind == "blob"
-        && matches!(entry.mode.as_str(), "100644" | "100755")
-        && entry.path.rsplit('/').next() == Some("SKILL.md")
+    is_regular_file(entry) && entry.path.rsplit('/').next() == Some("SKILL.md")
 }
 
-fn validate_entries(entries: &[TreeEntry], recursive: bool) -> Result<(), ScanError> {
+/// Symlinks and submodules are never read.
+pub(crate) fn is_regular_file(entry: &TreeEntry) -> bool {
+    entry.kind == "blob" && matches!(entry.mode.as_str(), "100644" | "100755")
+}
+
+pub(crate) fn validate_entries(entries: &[TreeEntry], recursive: bool) -> Result<(), ScanError> {
     let mut paths = HashSet::new();
     for entry in entries {
         validate_sha(&entry.sha)?;

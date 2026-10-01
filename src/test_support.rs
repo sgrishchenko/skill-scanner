@@ -31,6 +31,9 @@ mod cache;
 #[path = "organization_tests.rs"]
 mod organization_scan;
 
+#[path = "codex_install_tests.rs"]
+mod codex_install;
+
 pub(crate) struct TestDirectory(pub(crate) std::path::PathBuf);
 
 impl TestDirectory {

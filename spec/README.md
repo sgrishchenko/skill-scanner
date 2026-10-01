@@ -19,6 +19,7 @@ rules apply to both interfaces; interface documents link to those rules.
 | [Analysis cache](features/analysis-cache.md) | Persistent shared analyses, commit validation, invalidation, storage, and cache failures |
 | [Recent repositories](features/recent-repositories.md) | Shared persistent recent list, completion times, selection, and removal |
 | [Starred skills](features/starred-skills.md) | Persistent stars shared by both interfaces, the starred list and filter, and unstarring |
+| [Codex skills](features/codex-skills.md) | Installing discovered skills for Codex, folder ownership, conflicts, limits, and removal |
 | [Skill metadata](features/skill-metadata.md) | YAML fields, file limits, warnings, and display fallbacks |
 | [Similarity grouping](features/similarity-grouping.md) | Metadata matching, connected groups, ordering, and statistics |
 | [CLI report](features/cli-report.md) | Commands, terminal inventory, stdout/stderr, and exit codes |
@@ -41,13 +42,18 @@ verification approach supporting these features.
 - Show each discovered file's name, description, repository path, and source
   link, retaining files whose metadata is missing or unreadable.
 - Read repository content without executing scripts or skill instructions.
-  Discovery does not certify a skill's validity, compatibility, or safety.
+  Discovery and installation do not certify a skill's validity,
+  compatibility, or safety.
+
+- Install a discovered skill's files for the Codex agent on request, and remove
+  installations made by Skill Scanner, as defined by
+  [Codex skills](features/codex-skills.md).
 
 Private repositories, arbitrary multi-repository selections, local
 repository inputs, branch/tag/commit selection, Git history, submodule contents,
 and other agent configuration formats such as `AGENTS.md` and Cursor rules are
-outside the supported scope. Skill installation/execution and quality or
-security ratings are also excluded.
+outside the supported scope. Installing for agents other than Codex, skill
+execution, and quality or security ratings are also excluded.
 
 Hosted deployment, accounts, hosted authentication, a public bind option, full
 saved scan reports, and report export remain deferred. The internal web JSON

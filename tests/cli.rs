@@ -7,6 +7,7 @@ fn run(args: &[&str]) -> std::process::Output {
         .env("SKILL_SCANNER_HISTORY_DIR", "")
         .env("SKILL_SCANNER_CACHE_DIR", "")
         .env("SKILL_SCANNER_STARRED_DIR", "")
+        .env("SKILL_SCANNER_CODEX_SKILLS_DIR", "")
         .output()
         .unwrap()
 }
@@ -22,6 +23,9 @@ fn help_and_version_succeed_without_network_or_credentials() {
         &["recent", "remove", "--help"][..],
         &["starred", "--help"][..],
         &["starred", "remove", "--help"][..],
+        &["codex", "--help"][..],
+        &["codex", "install", "--help"][..],
+        &["codex", "remove", "--help"][..],
         &["--version"][..],
     ] {
         let output = run(args);
@@ -55,6 +59,16 @@ fn invalid_usage_exits_two_and_never_prints_an_inventory() {
         &["starred", "remove", "../escape", "SKILL.md"][..],
         &["starred", "remove", "a/b", "../SKILL.md"][..],
         &["starred", "remove", "a/b", "README.md"][..],
+        &["codex", "install"][..],
+        &["codex", "install", "a/b"][..],
+        &["codex", "install", "../escape", "SKILL.md"][..],
+        &["codex", "install", "a/b", "../SKILL.md"][..],
+        &["codex", "install", "a/b", "README.md"][..],
+        &["codex", "install", "a/b", "my skill/SKILL.md"][..],
+        &["codex", "remove"][..],
+        &["codex", "remove", "../escape"][..],
+        &["codex", "remove", "a", "b"][..],
+        &["codex", "list"][..],
     ] {
         let output = run(args);
         assert_eq!(output.status.code(), Some(2));
@@ -219,6 +233,114 @@ fn starred_commands_list_and_persist_removal_without_github_access() {
             .contains("SKILL_SCANNER_STARRED_DIR"));
     }
     assert_eq!(std::fs::read_to_string(file).unwrap(), "file");
+}
+
+#[test]
+fn codex_commands_list_and_remove_only_skill_scanner_installations_without_github_access() {
+    let directory =
+        std::env::temp_dir().join(format!("skill-scanner-cli-codex-{}", std::process::id()));
+    struct Directory(std::path::PathBuf);
+    impl Drop for Directory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    std::fs::create_dir(&directory).unwrap();
+    let directory = Directory(directory);
+    let commit = "1111111111111111111111111111111111111111";
+    let installed = directory.0.join("code-review");
+    std::fs::create_dir(&installed).unwrap();
+    std::fs::write(installed.join("SKILL.md"), "---\nname: code-review\n---\n").unwrap();
+    std::fs::write(
+        installed.join(".skill-scanner.json"),
+        format!(
+            r#"{{"format_version":1,"repository":"example/skills","path":"skills/code-review/SKILL.md","commit":"{commit}","installed_at":1}}"#
+        ),
+    )
+    .unwrap();
+    std::fs::create_dir(directory.0.join("mine")).unwrap();
+    let invoke = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
+            .args(args)
+            .env("SKILL_SCANNER_CODEX_SKILLS_DIR", &directory.0)
+            .env("GITHUB_TOKEN", "secret\ninvalid-header")
+            .env("HTTPS_PROXY", "http://127.0.0.1:9")
+            .output()
+            .unwrap()
+    };
+    let output = invoke(&["codex"]);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!(
+            "Codex skills installed by Skill Scanner in {}:\n\ncode-review\n  Repository: example/skills\n  Path: skills/code-review/SKILL.md\n  Link: https://github.com/example/skills/blob/{commit}/skills/code-review/SKILL.md\n",
+            directory.0.display()
+        )
+    );
+    let output = invoke(&["codex", "remove", "mine"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("was not installed by Skill Scanner"));
+    assert!(directory.0.join("mine").exists());
+    let output = invoke(&["codex", "remove", "code-review"]);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "Removed code-review from Codex skills.\n"
+    );
+    assert!(!installed.exists());
+    let output = invoke(&["codex", "remove", "code-review"]);
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("nothing was removed"));
+    let output = invoke(&["codex"]);
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .starts_with("No Codex skills installed by Skill Scanner"));
+
+    // Disabled installation never contacts GitHub.
+    for args in [
+        &["codex"][..],
+        &["codex", "install", "example/skills", "SKILL.md"][..],
+    ] {
+        let output = run(args);
+        let text = String::from_utf8([output.stdout, output.stderr].concat()).unwrap();
+        assert!(text.contains("disabled"), "{text}");
+    }
+    assert_eq!(
+        run(&["codex", "install", "example/skills", "SKILL.md"])
+            .status
+            .code(),
+        Some(1)
+    );
+    let file = directory.0.join("file");
+    std::fs::write(&file, "file").unwrap();
+    for args in [&["codex"][..], &["codex", "remove", "code-review"][..]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_skill-scanner"))
+            .args(args)
+            .env("SKILL_SCANNER_CODEX_SKILLS_DIR", &file)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("SKILL_SCANNER_CODEX_SKILLS_DIR"));
+    }
+    assert_eq!(std::fs::read_to_string(file).unwrap(), "file");
+    let output = run(&[
+        "codex",
+        "install",
+        "https://user:secret@github.com/a/b",
+        "SKILL.md",
+    ]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(!String::from_utf8(output.stderr).unwrap().contains("secret"));
 }
 
 #[test]

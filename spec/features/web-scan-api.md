@@ -16,6 +16,9 @@ Status: implemented. This internal HTTP contract serves the
 | `GET /api/starred` | List starred skills, newest first |
 | `POST /api/starred/add` | Star one skill |
 | `POST /api/starred/remove` | Unstar one skill |
+| `GET /api/codex` | List skills installed for Codex by Skill Scanner |
+| `POST /api/codex/install` | Install one scanned skill for Codex |
+| `POST /api/codex/remove` | Remove one installed Codex skill |
 
 ## Request validation
 
@@ -73,6 +76,31 @@ path, commit, or name under the [starring rules](starred-skills.md#starring-and-
 Starring while disabled returns HTTP 409; unstarring while disabled succeeds.
 Storage failures return HTTP 500 with an actionable JSON `message`. These
 routes do not contact GitHub, start a scan, or acquire its semaphore.
+
+## Codex skills
+
+`GET /api/codex` returns
+`{"enabled":true,"directory":"/home/user/.agents/skills","skills":[...]}`. Each
+entry contains `name` (folder name), `repository` (normalized string), `path`,
+`commit` (full SHA installed), `link` (GitHub source URL pinned to that commit),
+and `installed_at` (UTC milliseconds since the Unix epoch). Disabled
+installation returns `enabled: false`, a null `directory`, and an empty list.
+This read does not contact GitHub.
+
+`POST /api/codex/install` takes
+`{"repository":"example/skills","path":"skills/review/SKILL.md","commit":"<full-sha>"}`
+and returns HTTP 200 with `{"skill":{...},"files":3}` after the folder is
+published. `POST /api/codex/remove` takes `{"name":"review"}` and returns HTTP
+204, including when the folder is already absent. Both use the scan request's
+action header, content type, 4 KiB limit, unknown field rejection, and
+Host/Origin checks. Invalid repositories, paths, commits, and folder names
+return HTTP 400 under the [Codex skill rules](codex-skills.md#folder-names-and-ownership).
+Disabled installation, folder conflicts, and a concurrent Codex change return
+HTTP 409; GitHub failures and skills that cannot be installed return HTTP 502;
+storage failures return HTTP 500. Each error has an actionable JSON `message`
+without server error text. These routes neither start a scan nor acquire its
+semaphore; installation uses GitHub as described in
+[Codex skills](codex-skills.md#downloading-and-publishing).
 
 ## Streaming events
 

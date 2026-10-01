@@ -1,7 +1,11 @@
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    path::Path,
+};
 
 use crate::{
     aggregation,
+    codex::{InstallProgress, InstalledSkill},
     organization::{OrganizationInventory, OrganizationProgress},
     recent::RecentRepository,
     scanner::{Inventory, ScanProgress, Skill},
@@ -146,6 +150,68 @@ pub fn write_starred(
         }
     }
     Ok(())
+}
+
+pub fn write_codex(
+    mut output: impl Write,
+    skills: &[InstalledSkill],
+    directory: Option<&Path>,
+) -> io::Result<()> {
+    let Some(directory) = directory else {
+        return writeln!(
+            output,
+            "Codex skill installation is disabled. Set SKILL_SCANNER_CODEX_SKILLS_DIR to enable it."
+        );
+    };
+    let directory = terminal_text(&directory.to_string_lossy());
+    if skills.is_empty() {
+        writeln!(
+            output,
+            "No Codex skills installed by Skill Scanner in {directory}.\nInstall one with skill-scanner codex install OWNER/REPO PATH or from skill-scanner serve."
+        )?;
+    } else {
+        writeln!(
+            output,
+            "Codex skills installed by Skill Scanner in {directory}:"
+        )?;
+        for skill in skills {
+            writeln!(output)?;
+            writeln!(output, "{}", skill.name)?;
+            writeln!(output, "  Repository: {}", skill.repository)?;
+            writeln!(output, "  Path: {}", terminal_text(&skill.path))?;
+            writeln!(output, "  Link: {}", skill.link)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn write_install_progress(
+    mut output: impl Write,
+    progress: InstallProgress<'_>,
+) -> io::Result<()> {
+    match progress {
+        InstallProgress::Repository(repository) => {
+            writeln!(output, "Resolving repository: {repository}")?;
+        }
+        InstallProgress::Commit(reference) => {
+            writeln!(output, "Resolving commit: {}", terminal_text(reference))?;
+        }
+        InstallProgress::Listing(directory) => {
+            writeln!(output, "Listing skill files: {}", terminal_text(directory))?;
+        }
+        InstallProgress::File {
+            path,
+            current,
+            total,
+        } => {
+            writeln!(
+                output,
+                "Downloading file [{current}/{total}]: {}",
+                terminal_text(path)
+            )?;
+        }
+    }
+    output.flush()
 }
 
 pub fn write_report(mut output: impl Write, inventory: &Inventory) -> io::Result<()> {

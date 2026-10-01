@@ -100,23 +100,26 @@ pub(crate) fn read_entries(root: &Path, max_bytes: u64) -> io::Result<Vec<(Strin
         {
             continue;
         }
-        let name = name.to_owned();
-        let file = match open_entry(&path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(error),
-        };
-        if file.metadata()?.len() > max_bytes {
-            continue;
+        if let Some(bytes) = read_bounded(&path, max_bytes)? {
+            entries.push((name.to_owned(), bytes));
         }
-        let mut bytes = Vec::new();
-        file.take(max_bytes + 1).read_to_end(&mut bytes)?;
-        if bytes.len() as u64 > max_bytes {
-            continue;
-        }
-        entries.push((name, bytes));
     }
     Ok(entries)
+}
+
+/// Read one file of at most `max_bytes`. Oversized and vanished files are `None`.
+pub(crate) fn read_bounded(path: &Path, max_bytes: u64) -> io::Result<Option<Vec<u8>>> {
+    let file = match open_entry(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    if file.metadata()?.len() > max_bytes {
+        return Ok(None);
+    }
+    let mut bytes = Vec::new();
+    file.take(max_bytes + 1).read_to_end(&mut bytes)?;
+    Ok((bytes.len() as u64 <= max_bytes).then_some(bytes))
 }
 
 /// Remove one entry. Only a missing entry or directory is a successful no-op.
